@@ -1,6 +1,6 @@
-parent: "configs/base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/configs/base.yaml"
 
-save_path: "output/replica_test/debug"
+save_path: "/root/code/output/replica_test/debug"
 
 # map params
 uniform_sample_num: 46080
@@ -16,7 +16,7 @@ invalid_confidence_thresh: 0.1
 
 # dataset params:
 type: "Ours"
-source_path: "data/Ours/hotel"
+source_path: "/root/code/datasets/hotel"
 
 # state manage
 stable_confidence_thres: 250
@@ -35,7 +35,7 @@ KNN_threshold: -1
 # track params
 use_orb_backend: True
 tracker_max_fps: 15
-orb_settings_path: "configs/orb_config/ours.yaml"
+orb_settings_path: "/root/code/rtgslam_ros_ws/src/configs/orb_config/ours.yaml"
 
 use_gt_pose: False
 icp_use_model_depth: True # if False, use dataset depth frame to frame
