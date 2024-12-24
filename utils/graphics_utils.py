@@ -101,7 +101,7 @@ def eulerAngles2rotationMat(theta, format='degree'):
     :return:
     RPY角,是ZYX欧拉角,依次 绕定轴XYZ转动[rx, ry, rz]
     """
-    if format is 'degree':
+    if format == 'degree':
         theta = [i * math.pi / 180.0 for i in theta]
  
     R_x = np.array([[1, 0, 0],

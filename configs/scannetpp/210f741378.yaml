@@ -1,0 +1,10 @@
+parent: "/root/code/rtgslam_ros_ws/src/configs/scannetpp_base.yaml"
+save_step: 100
+
+frame_start: 0
+frame_step: 0
+frame_num: -1
+
+# dataset params:
+source_path: "/root/code/datasets/scannetpp/data/210f741378"
+save_path: "/root/code/output/dataset/ScanNetpp/210f741378"
