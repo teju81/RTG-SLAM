@@ -1,6 +1,6 @@
 parent: "/root/code/rtgslam_ros_ws/src/configs/base.yaml"
 
-save_path: "output/tum/debug"
+save_path: "/root/code/output/tum/debug"
 
 # dataset params:
 type: "TUM"
@@ -21,8 +21,8 @@ scaling_lr : 0.02
 rotation_lr : 0.001
 
 use_gt_pose: False
-use_orb_backend: True
-orb_useicp: True
+use_orb_backend: False
+orb_useicp: False
 icp_use_model_depth: True
 
 # track params
