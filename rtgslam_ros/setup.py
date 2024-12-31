@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'rtgslam_ros'
 
@@ -9,6 +11,8 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        ('bin', glob('scripts/*.sh')),
         ('share/' + package_name, ['package.xml']),
     ],
     install_requires=['setuptools'],
@@ -20,6 +24,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'slam_frontend = rtgslam_ros.SLAM.multiprocess.tracker:main',
+            'slam_backend = rtgslam_ros.SLAM.multiprocess.mapper:main',
+            'slam_gui = rtgslam_ros.SLAM.multiprocess.slam_gui:main',
         ],
     },
 )
