@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from SLAM.utils import *
+from rtgslam_ros.SLAM.utils import *
 
 def point2plane_loss(p_t0, p_t1, n_t0, reduce="mean"):
     loss = ((p_t1 - p_t0) * n_t0).sum(dim=-1)

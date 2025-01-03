@@ -1,1 +1,11 @@
-x
+string msg
+std_msgs/Int32MultiArray frame
+int32 frame_id
+std_msgs/Float32MultiArray xyz
+std_msgs/Float32MultiArray opacity
+std_msgs/Float32MultiArray scaling
+std_msgs/Float32MultiArray rotation
+std_msgs/Float32MultiArray shs #features
+std_msgs/Float32MultiArray radius
+std_msgs/Float32MultiArray normal
+std_msgs/Float32MultiArray confidence

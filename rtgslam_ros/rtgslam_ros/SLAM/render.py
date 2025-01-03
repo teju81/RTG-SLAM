@@ -2,8 +2,8 @@ import numpy as np
 import math
 import torch
 
-from scene.cameras import Camera
-from SLAM.utils import devF, devI
+from rtgslam_ros.scene.cameras import Camera
+from rtgslam_ros.SLAM.utils import devF, devI
 
 from diff_gaussian_rasterization_depth import (
     GaussianRasterizationSettings as GaussianRasterizationSettings_depth,
@@ -12,7 +12,7 @@ from diff_gaussian_rasterization_depth import (
     GaussianRasterizer as GaussianRasterizer_depth,
 )
 
-from utils.general_utils import (
+from rtgslam_ros.utils.general_utils import (
     build_covariance_from_scaling_rotation,
     inverse_sigmoid
 )

@@ -1,1 +1,15 @@
-x
+string msg
+bool has_gaussians
+uint8 submap_id
+uint8 active_sh_degree
+uint8 max_sh_degree
+std_msgs/Float32MultiArray xyz
+std_msgs/Float32MultiArray features
+std_msgs/Float32MultiArray scaling
+std_msgs/Float32MultiArray rotation
+std_msgs/Float32MultiArray opacity
+int32 n_obs
+std_msgs/Int32MultiArray gtcolor
+std_msgs/Float32MultiArray gtdepth
+CameraMsg current_frame
+bool finish

@@ -1,17 +1,48 @@
 import copy
 import matplotlib.pyplot as plt
-from SLAM.gaussian_pointcloud import *
+from rtgslam_ros.SLAM.gaussian_pointcloud import *
 
 import torch.multiprocessing as mp
-from SLAM.render import Renderer
+from rtgslam_ros.SLAM.render import Renderer
 from collections import defaultdict
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 
-from SLAM.icp import IcpTracker
+from rtgslam_ros.SLAM.icp import IcpTracker
 from threading import Thread
-from utils.camera_utils import loadCam
+from rtgslam_ros.utils.camera_utils import loadCam
 
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+import threading
+
+# from rtgslam_interfaces.msg import F2B, B2F, F2G, CameraMsg, GaussiansMsg
+# from rtgslam_ros.src.utils.ros_utils import (
+#     convert_ros_array_message_to_tensor, 
+#     convert_ros_multi_array_message_to_tensor, 
+#     convert_tensor_to_ros_message, 
+#     convert_numpy_array_to_ros_message, 
+#     convert_ros_multi_array_message_to_numpy, 
+# )
+# from rtgslam_ros.src.gui.gui_utils import (
+#     ParamsGUI,
+#     GaussianPacket,
+#     Packet_vis2main,
+#     create_frustum,
+#     cv_gl,
+#     get_latest_queue,
+# )
+# from rtgslam_ros.src.utils.multiprocessing_utils import clone_obj
+
+
+import os
+from argparse import ArgumentParser
+from rtgslam_ros.utils.config_utils import read_config
+from rtgslam_ros.arguments import DatasetParams, MapParams, OptimizationParams
+from rtgslam_ros.scene import Dataset
+from rtgslam_ros.SLAM.multiprocess.mapper import MappingProcess
+from rtgslam_ros.utils.general_utils import safe_state
 
 def convert_poses(trajs):
     poses = []
@@ -26,8 +57,10 @@ def convert_poses(trajs):
     return poses, stamps
 
 
-class Tracker(object):
+class Tracker(Node):
     def __init__(self, args):
+        super().__init__('tracker_frontend_node')
+
         self.use_gt_pose = args.use_gt_pose
         self.mode = args.mode
         self.K = None
@@ -43,7 +76,7 @@ class Tracker(object):
         self.pose_gt = []
         self.pose_es = []
         self.timestampes = []
-        self.finish = mp.Condition()
+        self.finish = False # mp.Condition() # Need to find another way of signalling the end - TBD
 
         self.icp_success_count = 0
 
@@ -379,7 +412,7 @@ class Tracker(object):
 
 
 class TrackingProcess(Tracker):
-    def __init__(self, slam, args):
+    def __init__(self, map_params, optimization_params, dataset, args):
         args.icp_use_model_depth = False
         super().__init__(args)
 
@@ -388,23 +421,23 @@ class TrackingProcess(Tracker):
         self.use_online_scanner = args.use_online_scanner
         self.scanner_finish = False
 
-        # sync mode
-        self.sync_tracker2mapper_method = slam.sync_tracker2mapper_method
-        self.sync_tracker2mapper_frames = slam.sync_tracker2mapper_frames
+        self.map_params = map_params
 
-        # tracker2mapper
-        self._tracker2mapper_call = slam._tracker2mapper_call
-        self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
+        # sync mode
+        self.sync_tracker2mapper_method = self.map_params.sync_tracker2mapper_method
+        self.sync_tracker2mapper_frames = self.map_params.sync_tracker2mapper_frames
+
+        # tracker2mapper: Define the ros2 publisher and messages here
 
         self.mapper_running = True
 
-        # mapper2tracker
-        self._mapper2tracker_call = slam._mapper2tracker_call
-        self._mapper2tracker_map_queue = slam._mapper2tracker_map_queue
+        # mapper2tracker: Define the ros2 publisher and messages here
 
-        self.dataset_cameras = slam.dataset.scene_info.train_cameras
-        self.map_process = slam.map_process
-        self._end = slam._end
+        self.dataset = dataset
+
+        self.dataset_cameras = self.dataset.scene_info.train_cameras
+        #self.map_process = MappingProcess(args, optimization_params, self) - Dont need this anymore
+        self._end = False
         self.max_fps = args.tracker_max_fps
         self.frame_time = 1.0 / self.max_fps
         self.frame_id = 0
@@ -418,20 +451,6 @@ class TrackingProcess(Tracker):
 
     def map_preprocess_mp(self, frame, frame_id):
         self.map_input = super().map_preprocess(frame, frame_id)
-
-    def send_frame_to_mapper(self):
-        print("tracker send frame {} to mapper".format(self.map_input["time"]))
-        self._tracker2mapper_call.acquire()
-        self._tracker2mapper_frame_queue.put(self.map_input)
-        self.map_process._requests[0] = True
-        self._tracker2mapper_call.notify()
-        self._tracker2mapper_call.release()
-
-    def finish_(self):
-        if self.use_online_scanner:
-            return self.scanner_finish
-        else:
-            return self.frame_id >= len(self.dataset_cameras)
 
     def getNextFrame(self):
         frame_info = self.dataset_cameras[self.frame_id]
@@ -460,64 +479,93 @@ class TrackingProcess(Tracker):
             self.map_input["frame"] = frame
 
             self.map_input["poses_new"] = self.get_new_poses()
-            # send message to mapper
 
+            # send message to mapper - Implement T2M publisher and corresponding Messages
             self.send_frame_to_mapper()
 
+            # Need to reimplement this process of keeping in sync with the mapper.
+            # Two conditions - Strict and Loose. Start with one condition.
             wait_begin = time.time()
             if not self.finish_() and self.mapper_running:
-                if self.sync_tracker2mapper_method == "strict":
-                    if (frame_id + 1) % self.sync_tracker2mapper_frames == 0:
-                        with self._mapper2tracker_call:
-                            print("wait mapper to wakeup")
-                            print(
-                                "tracker buffer size: {}".format(
-                                    self._tracker2mapper_frame_queue.qsize()
-                                )
-                            )
-                            self._mapper2tracker_call.wait()
-                elif self.sync_tracker2mapper_method == "loose":
-                    if (
-                        frame_id - self.last_mapper_frame_id
-                    ) > self.sync_tracker2mapper_frames:
-                        with self._mapper2tracker_call:
-                            print("wait mapper to wakeup")
-                            self._mapper2tracker_call.wait()
-                else:
-                    pass
+                pass
+                # if self.sync_tracker2mapper_method == "strict":
+                #     if (frame_id + 1) % self.sync_tracker2mapper_frames == 0:
+                #         with self._mapper2tracker_call:
+                #             print("wait mapper to wakeup")
+                #             print(
+                #                 "tracker buffer size: {}".format(
+                #                     self._tracker2mapper_frame_queue.qsize()
+                #                 )
+                #             )
+                #             self._mapper2tracker_call.wait()
+                # elif self.sync_tracker2mapper_method == "loose":
+                #     if (
+                #         frame_id - self.last_mapper_frame_id
+                #     ) > self.sync_tracker2mapper_frames:
+                #         with self._mapper2tracker_call:
+                #             print("wait mapper to wakeup")
+                #             self._mapper2tracker_call.wait()
+                # else:
+                #     pass
             wait_end = time.time()
 
+            
+            # Reimplement - Listener for M2T subscriber and corresponding Messages
             self.unpack_map_to_tracker()
+
             self.update_last_mapper_render(frame)
+
+            # Reimplement - Publisher T2G and corresponding messages
             self.update_viewer(frame)
 
             move_to_cpu(frame)
 
             self.time += 1
-        # send a invalid time stamp as end signal
+
+        # Signal to mapper to finish and save trajectory - Needs to be reimplemented (can have a boolean variable signalling this when sending each frame )
         self.map_input["time"] = -1
         self.send_frame_to_mapper()
         self.save_traj(self.save_path)
-        self._end[0] = 1
-        with self.finish:
-            print("tracker wating finish")
-            self.finish.wait()
+
+        # Finish in a synchronized fashion if possible - reimplement
+        # self._end[0] = 1
+        # with self.finish:
+        #     print("tracker wating finish")
+        #     self.finish.wait()
+
         print("track finish")
 
-    def stop(self):
-        with self.finish:
-            self.finish.notify()
+
+    def send_frame_to_mapper(self):
+        # Implement sending info to mapper via ROS topics
+        print("tracker send frame {} to mapper".format(self.map_input["time"]))
+        # self._tracker2mapper_call.acquire()
+        # self._tracker2mapper_frame_queue.put(self.map_input)
+        # self.map_process._requests[0] = True
+        # self._tracker2mapper_call.notify()
+        # self._tracker2mapper_call.release()
+
+    def finish_(self):
+        if self.use_online_scanner:
+            return self.scanner_finish
+        else:
+            return self.frame_id >= len(self.dataset_cameras)
+
+    def update_viewer(self, frame):
+        #Implement info to be passed to GUI here
+        pass
 
     def unpack_map_to_tracker(self):
-        self._mapper2tracker_call.acquire()
-        while not self._mapper2tracker_map_queue.empty():
-            map_info = self._mapper2tracker_map_queue.get()
-            self.last_frame = map_info["frame"]
-            self.last_global_params = map_info["global_params"]
-            self.last_mapper_frame_id = map_info["frame_id"]
-            print("tracker unpack map {}".format(self.last_mapper_frame_id))
-        self._mapper2tracker_call.notify()
-        self._mapper2tracker_call.release()
+        pass
+        # self._mapper2tracker_call.acquire()
+        # while not self._mapper2tracker_map_queue.empty():
+        #     map_info = self._mapper2tracker_map_queue.get()
+        #     self.last_frame = map_info["frame"]
+        #     self.last_global_params = map_info["global_params"]
+        #     self.last_mapper_frame_id = map_info["frame_id"]
+        #     print("tracker unpack map {}".format(self.last_mapper_frame_id))
+        # self._mapper2tracker_call.notify()
+        # self._mapper2tracker_call.release()
 
     def update_last_mapper_render(self, frame):
         pose_t0_w = frame.get_c2w.cpu().numpy()
@@ -536,3 +584,54 @@ class TrackingProcess(Tracker):
                 render_output["normal"].permute(1, 2, 0),
                 self.map_input["normal_map_w"],
             )
+
+    # def stop(self):
+    #     with self.finish:
+    #         self.finish.notify()
+
+def spin_thread(node):
+    # Spin the node continuously in a separate thread
+    while rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=0.1)
+
+def main():
+    parser = ArgumentParser(description="Training script parameters")
+    args = parser.parse_args()
+    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml"
+    args = read_config(config_path)
+    # set visible devices
+    device_list = args.device_list
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in device_list)
+
+    safe_state(args.quiet)
+    
+    optimization_params = OptimizationParams(parser)
+    optimization_params = optimization_params.extract(args)
+
+    dataset_params = DatasetParams(parser, sentinel=True)
+    dataset_params = dataset_params.extract(args)
+    
+    map_params = MapParams(parser)
+    map_params = map_params.extract(args)
+
+    # Initialize dataset
+    dataset = Dataset(
+        dataset_params,
+        shuffle=False,
+        resolution_scales=dataset_params.resolution_scales,
+    )
+
+    rclpy.init()
+    tracker_node = TrackingProcess(map_params, optimization_params, dataset, args)
+    try:
+        # Start the spin thread for continuously handling callbacks
+        spin_thread_instance = threading.Thread(target=spin_thread, args=(tracker_node,))
+        spin_thread_instance.start()
+
+        # Run the main logic (this will execute in parallel with message handling)
+        tracker_node.run()
+        
+    finally:
+        tracker_node.destroy_node()
+        rclpy.shutdown()
+        spin_thread_instance.join()  # Wait for the spin thread to finish

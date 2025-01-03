@@ -9,8 +9,8 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-from arguments import DatasetParams
-from scene.dataset_readers import sceneLoadTypeCallbacks
+from rtgslam_ros.arguments import DatasetParams
+from rtgslam_ros.scene.dataset_readers import sceneLoadTypeCallbacks
 
 
 class Dataset:

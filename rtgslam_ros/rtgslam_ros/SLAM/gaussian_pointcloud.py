@@ -3,13 +3,13 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from SLAM.utils import *
-from utils.general_utils import (
+from rtgslam_ros.SLAM.utils import *
+from rtgslam_ros.utils.general_utils import (
     build_rotation,
     build_covariance_from_scaling_rotation,
     inverse_sigmoid
 )
-from utils.sh_utils import RGB2SH, SH2RGB
+from rtgslam_ros.utils.sh_utils import RGB2SH, SH2RGB
 
 
 class GaussianPointCloud(object):

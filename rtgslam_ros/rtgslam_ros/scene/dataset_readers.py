@@ -22,7 +22,7 @@ import yaml
 from PIL import Image
 from plyfile import PlyData, PlyElement
 
-from scene.colmap_loader import (
+from rtgslam_ros.scene.colmap_loader import (
     qvec2rotmat,
     read_extrinsics_binary,
     read_extrinsics_text,
@@ -31,15 +31,15 @@ from scene.colmap_loader import (
     read_points3D_binary,
     read_points3D_text,
 )
-from scene.gaussian_model import BasicPointCloud
-from utils.graphics_utils import (
+from rtgslam_ros.scene.gaussian_model import BasicPointCloud
+from rtgslam_ros.utils.graphics_utils import (
     focal2fov,
     fov2focal,
     getK,
     getWorld2View,
     getWorld2View2,
 )
-from utils.sh_utils import SH2RGB
+from rtgslam_ros.utils.sh_utils import SH2RGB
 
 
 def get_split_list(a, num):

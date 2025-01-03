@@ -18,14 +18,14 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/F2B.msg"
   "msg/B2F.msg"
-  "msg/B2LC.msg"
+  #"msg/B2LC.msg"
   "msg/F2G.msg"
-  "msg/G2F.msg"
-  "msg/Gaussian.msg"
-  "msg/Keyframe.msg"
-  "msg/OccAwareVisibility.msg"
-  "msg/CameraMsg.msg"
-  "msg/KFWindow.msg"
+  #"msg/G2F.msg"
+  #"msg/Gaussian.msg"
+  #"msg/Keyframe.msg"
+  #"msg/OccAwareVisibility.msg"
+  #"msg/CameraMsg.msg"
+  #"msg/KFWindow.msg"
   DEPENDENCIES std_msgs
  )
 

@@ -12,9 +12,9 @@
 import numpy as np
 from PIL import Image
 
-from scene.cameras import Camera
-from utils.general_utils import PILtoTorch
-from utils.graphics_utils import fov2focal
+from rtgslam_ros.scene.cameras import Camera
+from rtgslam_ros.utils.general_utils import PILtoTorch
+from rtgslam_ros.utils.graphics_utils import fov2focal
 
 WARNED = False
 

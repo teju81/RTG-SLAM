@@ -104,7 +104,7 @@ icp_fail_threshold: 0.02
 # orb backend
 use_orb_backend: False
 use_orb_viewer: False
-orb_vocab_path: "/root/code/rtgslam_ros_ws/thirdParty/ORB-SLAM2-PYBIND/Vocabulary/ORBvoc.txt"
+orb_vocab_path: "/root/code/thirdParty/RTG-SLAM-BACKEND/Vocabulary/ORBvoc.txt"
 orb_settings_path: ""
 tracker_max_fps: 15
 orb_useicp: True

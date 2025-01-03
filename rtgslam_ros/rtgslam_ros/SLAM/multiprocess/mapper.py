@@ -7,13 +7,13 @@ import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from collections import deque
-from scene.cameras import Camera
-from SLAM.gaussian_pointcloud import *
-from SLAM.render import Renderer
-from SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
-from utils.loss_utils import l1_loss, l2_loss, ssim
+from rtgslam_ros.scene.cameras import Camera
+from rtgslam_ros.SLAM.gaussian_pointcloud import *
+from rtgslam_ros.SLAM.render import Renderer
+from rtgslam_ros.SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
+from rtgslam_ros.utils.loss_utils import l1_loss, l2_loss, ssim
 from cuda_utils._C import accumulate_gaussian_error
-from utils.monitor import Recorder
+from rtgslam_ros.utils.monitor import Recorder
 
 class Mapping(object):
     def __init__(self, args, recorder=None) -> None:
@@ -1138,25 +1138,25 @@ class Mapping(object):
 
 
 class MappingProcess(Mapping):
-    def __init__(self, map_params, optimization_params, slam):
+    def __init__(self, map_params, optimization_params):
         super().__init__(map_params)
         self.recorder = Recorder(map_params.device_list[0])
         print("finish init")
 
-        self.slam = slam
-        # tracker 2 mapper
-        self._tracker2mapper_call = slam._tracker2mapper_call
-        self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
+        # self.slam = slam
+        # # tracker 2 mapper
+        # self._tracker2mapper_call = slam._tracker2mapper_call
+        # self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
 
-        # mapper 2 system
-        self._mapper2system_call = slam._mapper2system_call
-        self._mapper2system_map_queue = slam._mapper2system_map_queue
-        self._mapper2system_tb_queue = slam._mapper2system_tb_queue
-        self._mapper2system_requires = slam._mapper2system_requires
+        # # mapper 2 system
+        # self._mapper2system_call = slam._mapper2system_call
+        # self._mapper2system_map_queue = slam._mapper2system_map_queue
+        # self._mapper2system_tb_queue = slam._mapper2system_tb_queue
+        # self._mapper2system_requires = slam._mapper2system_requires
 
-        # mapper 2 tracker
-        self._mapper2tracker_call = slam._mapper2tracker_call
-        self._mapper2tracker_map_queue = slam._mapper2tracker_map_queue
+        # # mapper 2 tracker
+        # self._mapper2tracker_call = slam._mapper2tracker_call
+        # self._mapper2tracker_map_queue = slam._mapper2tracker_map_queue
 
         self._requests = [False, False]  # [frame process, global optimization]
         self._stop = False
@@ -1214,21 +1214,31 @@ class MappingProcess(Mapping):
             "frame_id": self.processed_tick[-1],
         }
         print("mapper send map {} to tracker".format(self.processed_tick[-1]))
-        with self._mapper2tracker_call:
-            self._mapper2tracker_map_queue.put(map_info)
-            self._mapper2tracker_call.notify()
+
+        # Reimplement this part - TBD
+        # with self._mapper2tracker_call:
+        #     self._mapper2tracker_map_queue.put(map_info)
+        #     self._mapper2tracker_call.notify()
 
     def run(self):
         while True:
-            print("map run...")
-            with self._tracker2mapper_call:
-                if self._tracker2mapper_frame_queue.qsize() == 0:
-                    print("waiting tracker to wakeup")
-                    self._tracker2mapper_call.wait()
-                self.input = self._tracker2mapper_frame_queue.get()
-                self.max_frame_id = max(self.max_frame_id, self.input["time"])
+            print("waiting tracker to wakeup")
 
-            # TODO: debug input is None
+            # Need to reimplement the subscriber that listens to tracker - TBD
+            # Rxs self.input from tracker which is basically the frame information
+
+            # with self._tracker2mapper_call:
+            #     if self._tracker2mapper_frame_queue.qsize() == 0:
+            #         print("waiting tracker to wakeup")
+            #         self._tracker2mapper_call.wait()
+            #     self.input = self._tracker2mapper_frame_queue.get() - Replace this with ros2 topic
+            #     self.max_frame_id = max(self.max_frame_id, self.input["time"])
+
+
+            # This part goes into the listener
+            print("map run...")
+
+            # TODO: debug input is None (used for exiting after tracker finishes and signals an invalid timestamp, Exiting the while loop)
             if "time" in self.input and self.input["time"] == -1:
                 del self.input
                 break
@@ -1237,6 +1247,8 @@ class MappingProcess(Mapping):
             self.set_input()
             self.processed_tick.append(self.time)
             self.mapping(self.frame, self.frame_map, self.input["time"], self.optimization_params)
+
+            # Send map to tracker - reimplement using ros2 topics TBD
             self.pack_map_to_tracker()
 
 
@@ -1246,15 +1258,62 @@ class MappingProcess(Mapping):
         self.send_output()
         print("processed frames: ", self.optimize_frames_ids)
         print("keyframes: ", self.keyframe_ids)
-        self._end[1] = 1
-        with self._mapper2system_call:
-            self._mapper2system_call.notify()
+        # self._end[1] = 1
+        # with self._mapper2system_call:
+        #     self._mapper2system_call.notify()
 
-        with self.finish:
-            print("mapper wating finish")
-            self.finish.wait()
+        # with self.finish:
+        #     print("mapper wating finish")
+        #     self.finish.wait()
         print("map finish")
 
     def stop(self):
         with self.finish:
             self.finish.notify()
+
+def spin_thread(node):
+    # Spin the node continuously in a separate thread
+    while rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=0.1)
+
+def main():
+    parser = ArgumentParser(description="Training script parameters")
+    args = parser.parse_args()
+    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml"
+    args = read_config(config_path)
+    # set visible devices
+    device_list = args.device_list
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in device_list)
+
+    safe_state(args.quiet)
+    
+    optimization_params = OptimizationParams(parser)
+    optimization_params = optimization_params.extract(args)
+
+    dataset_params = DatasetParams(parser, sentinel=True)
+    dataset_params = dataset_params.extract(args)
+    
+    map_params = MapParams(parser)
+    map_params = map_params.extract(args)
+
+    # Initialize dataset
+    dataset = Dataset(
+        dataset_params,
+        shuffle=False,
+        resolution_scales=dataset_params.resolution_scales,
+    )
+
+    rclpy.init()
+    mapper_node = MappingProcess(map_params, optimization_params)
+    try:
+        # Start the spin thread for continuously handling callbacks
+        spin_thread_instance = threading.Thread(target=spin_thread, args=(mapper_node,))
+        spin_thread_instance.start()
+
+        # Run the main logic (this will execute in parallel with message handling)
+        mapper_node.run()
+        
+    finally:
+        mapper_node.destroy_node()
+        rclpy.shutdown()
+        spin_thread_instance.join()  # Wait for the spin thread to finish

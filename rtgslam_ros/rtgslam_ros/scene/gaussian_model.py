@@ -17,15 +17,15 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from utils.general_utils import (
+from rtgslam_ros.utils.general_utils import (
     build_rotation,
     build_scaling_rotation,
     get_expon_lr_func,
     inverse_sigmoid,
     strip_symmetric,
 )
-from utils.graphics_utils import BasicPointCloud
-from utils.sh_utils import RGB2SH, SH2RGB
+from rtgslam_ros.utils.graphics_utils import BasicPointCloud
+from rtgslam_ros.utils.sh_utils import RGB2SH, SH2RGB
 
 
 def gaussian_3d_coeff(xyzs, covs):

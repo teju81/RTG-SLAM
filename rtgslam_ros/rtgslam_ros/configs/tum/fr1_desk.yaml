@@ -1,4 +1,4 @@
-parent: "/root/code/rtgslam_ros_ws/src/configs/tum_base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum_base.yaml"
 
 frame_start: 0
 frame_step: 0
@@ -8,4 +8,4 @@ frame_num: -1
 source_path: "/root/code/datasets/tum/rgbd_dataset_freiburg1_desk"
 save_path: "/root/code/output/tum/fr1_desk"
 
-orb_settings_path: "/root/code/rtgslam_ros_ws/src/configs/orb_config/tum1.yaml"
+orb_settings_path: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/orb_config/tum1.yaml"

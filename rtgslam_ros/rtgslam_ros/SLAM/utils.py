@@ -14,7 +14,7 @@ from skimage import filters
 from skimage.color import rgb2gray
 import numpy
 import yaml
-from utils.general_utils import devB, devF, devI, quaternion_from_axis_angle
+from rtgslam_ros.utils.general_utils import devB, devF, devI, quaternion_from_axis_angle
 
 
 def homogeneous(points: torch.tensor):

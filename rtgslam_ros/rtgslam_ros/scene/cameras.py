@@ -12,10 +12,10 @@
 import numpy as np
 import torch
 from torch import nn
-from SLAM.utils import downscale_img
+from rtgslam_ros.SLAM.utils import downscale_img
 
-from utils.graphics_utils import fov2focal, getProjectionMatrix, getWorld2View2
-from utils.general_utils import devF
+from rtgslam_ros.utils.graphics_utils import fov2focal, getProjectionMatrix, getWorld2View2
+from rtgslam_ros.utils.general_utils import devF
 
 
 class Camera(nn.Module):
