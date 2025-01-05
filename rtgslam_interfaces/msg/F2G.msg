@@ -11,5 +11,5 @@ std_msgs/Float32MultiArray opacity
 int32 n_obs
 std_msgs/Int32MultiArray gtcolor
 std_msgs/Float32MultiArray gtdepth
-CameraMsg current_frame
+#CameraMsg current_frame
 bool finish

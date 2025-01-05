@@ -1138,7 +1138,7 @@ class Mapping(object):
 
 
 class MappingProcess(Mapping):
-    def __init__(self, map_params, optimization_params):
+    def __init__(self, map_params, optimization_params, dataset, args):
         super().__init__(map_params)
         self.recorder = Recorder(map_params.device_list[0])
         print("finish init")
@@ -1304,7 +1304,7 @@ def main():
     )
 
     rclpy.init()
-    mapper_node = MappingProcess(map_params, optimization_params)
+    mapper_node = MappingProcess(map_params, optimization_params, dataset, args)
     try:
         # Start the spin thread for continuously handling callbacks
         spin_thread_instance = threading.Thread(target=spin_thread, args=(mapper_node,))

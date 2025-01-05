@@ -1,10 +1,13 @@
 string msg
-std_msgs/Int32MultiArray frame
-float32 time
-std_msgs/Int32MultiArray color_map
+Camera frame
+# NONE poses_new
+int32 time
+std_msgs/Float32MultiArray color_map
 std_msgs/Float32MultiArray depth_map
-std_msgs/Int32MultiArray normal_map_c
-std_msgs/Int32MultiArray normal_map_w
-std_msgs/Int32MultiArray vertex_map_c
-std_msgs/Int32MultiArray vertex_map_w
+std_msgs/Float32MultiArray normal_map_c
+std_msgs/Float32MultiArray normal_map_w
+std_msgs/Float32MultiArray vertex_map_c
+std_msgs/Float32MultiArray vertex_map_w
+std_msgs/Float32MultiArray confidence_map
+std_msgs/Int32MultiArray invalid_confidence_mask
 bool finish

@@ -17,14 +17,14 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import threading
 
-# from rtgslam_interfaces.msg import F2B, B2F, F2G, CameraMsg, GaussiansMsg
-# from rtgslam_ros.src.utils.ros_utils import (
-#     convert_ros_array_message_to_tensor, 
-#     convert_ros_multi_array_message_to_tensor, 
-#     convert_tensor_to_ros_message, 
-#     convert_numpy_array_to_ros_message, 
-#     convert_ros_multi_array_message_to_numpy, 
-# )
+from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera
+from rtgslam_ros.utils.ros_utils import (
+    convert_ros_array_message_to_tensor, 
+    convert_ros_multi_array_message_to_tensor, 
+    convert_tensor_to_ros_message, 
+    convert_numpy_array_to_ros_message, 
+    convert_ros_multi_array_message_to_numpy, 
+)
 # from rtgslam_ros.src.gui.gui_utils import (
 #     ParamsGUI,
 #     GaussianPacket,
@@ -55,7 +55,6 @@ def convert_poses(trajs):
         poses.append(pose_)
         stamps.append(stamp)
     return poses, stamps
-
 
 class Tracker(Node):
     def __init__(self, args):
@@ -188,6 +187,7 @@ class Tracker(Node):
         frame_map["confidence_map"] = confidence_map
         frame_map["invalid_confidence_mask"] = invalid_confidence_mask
         frame_map["time"] = frame_id
+        frame_map["finish"] = False
 
         return frame_map
 
@@ -420,18 +420,17 @@ class TrackingProcess(Tracker):
         # online scanner
         self.use_online_scanner = args.use_online_scanner
         self.scanner_finish = False
+        self.device = "cuda"
 
         self.map_params = map_params
 
         # sync mode
         self.sync_tracker2mapper_method = self.map_params.sync_tracker2mapper_method
         self.sync_tracker2mapper_frames = self.map_params.sync_tracker2mapper_frames
-
-        # tracker2mapper: Define the ros2 publisher and messages here
+        self.rx_backend_msg = False
 
         self.mapper_running = True
 
-        # mapper2tracker: Define the ros2 publisher and messages here
 
         self.dataset = dataset
 
@@ -449,6 +448,13 @@ class TrackingProcess(Tracker):
         self.track_renderer = Renderer(args)
         self.save_path = args.save_path
 
+        self.queue_size = 100
+        self.msg_counter = 0
+        self.f2b_publisher = self.create_publisher(F2B,'Front2Back',self.queue_size)
+        self.f2g_publisher = self.create_publisher(F2G,'Front2GUI',self.queue_size)
+        self.b2f_subscriber = self.create_subscription(B2F, '/Back2Front', self.b2f_listener_callback, self.queue_size)
+        self.b2f_subscriber  # prevent unused variable warning
+
     def map_preprocess_mp(self, frame, frame_id):
         self.map_input = super().map_preprocess(frame, frame_id)
 
@@ -458,6 +464,53 @@ class TrackingProcess(Tracker):
         print("get frame: {}".format(self.frame_id))
         self.frame_id += 1
         return frame
+
+    def convert_to_f2b_ros_msg(self):
+
+        f2b_msg = F2B()
+
+        f2b_msg.msg = f'Hello world {self.msg_counter}'
+        f2b_msg.time = self.map_input["time"]
+        f2b_msg.color_map = convert_tensor_to_ros_message(self.map_input["color_map"])
+        f2b_msg.depth_map = convert_tensor_to_ros_message(self.map_input["depth_map"])
+        f2b_msg.normal_map_c = convert_tensor_to_ros_message(self.map_input["normal_map_c"])
+        f2b_msg.normal_map_w = convert_tensor_to_ros_message(self.map_input["normal_map_w"])
+        f2b_msg.vertex_map_c = convert_tensor_to_ros_message(self.map_input["vertex_map_c"])
+        f2b_msg.vertex_map_w = convert_tensor_to_ros_message(self.map_input["vertex_map_w"])
+        f2b_msg.confidence_map = convert_tensor_to_ros_message(self.map_input["confidence_map"])
+        #f2b_msg.invalid_confidence_mask = convert_tensor_to_ros_message(self.map_input["invalid_confidence_mask"]) how to handle torch.BoolTensor
+        f2b_msg.finish = self.map_input["finish"]
+        if self.map_input["poses_new"] is not None:
+            f2b_msg.poses_new = convert_tensor_to_ros_message(self.map_input["poses_new"])
+        f2b_msg.frame.uid = self.map_input["frame"].uid
+        f2b_msg.frame.rot = convert_numpy_array_to_ros_message(self.map_input["frame"].R)
+        print(self.map_input["frame"].T)
+        f2b_msg.frame.trans = self.map_input["frame"].T.tolist()
+        f2b_msg.frame.fx = self.map_input["frame"].fx
+        f2b_msg.frame.fy = self.map_input["frame"].fy
+        f2b_msg.frame.cx = self.map_input["frame"].cx
+        f2b_msg.frame.cy = self.map_input["frame"].cy
+        f2b_msg.frame.fovx = self.map_input["frame"].fovx
+        f2b_msg.frame.fovy = self.map_input["frame"].fovy        
+        f2b_msg.frame.image = convert_tensor_to_ros_message(self.map_input["frame"].image)
+        f2b_msg.frame.image_path = self.map_input["frame"].image_path
+        f2b_msg.frame.image_width = self.map_input["frame"].image_width
+        f2b_msg.frame.image_height = self.map_input["frame"].image_height
+        f2b_msg.frame.image_name = self.map_input["frame"].image_name
+        f2b_msg.frame.depth_path = self.map_input["frame"].depth_path
+        f2b_msg.frame.pose_gt = convert_tensor_to_ros_message(self.map_input["frame"].pose_gt)
+        f2b_msg.frame.depth_scale = self.map_input["frame"].depth_scale
+        f2b_msg.frame.timestamp = self.map_input["frame"].timestamp
+
+        return f2b_msg
+
+    def publish_to_backend(self):
+        # Implement sending info to mapper via ROS topics
+        print("tracker send frame {} to mapper".format(self.map_input["time"]))
+        f2b_msg = self.convert_to_f2b_ros_msg()
+        self.get_logger().info(f'Publishing to Backend Node: {self.msg_counter}')
+        self.f2b_publisher.publish(f2b_msg)
+        self.msg_counter += 1
 
 
     def run(self):
@@ -481,13 +534,20 @@ class TrackingProcess(Tracker):
             self.map_input["poses_new"] = self.get_new_poses()
 
             # send message to mapper - Implement T2M publisher and corresponding Messages
-            self.send_frame_to_mapper()
+            self.publish_to_backend()
 
             # Need to reimplement this process of keeping in sync with the mapper.
-            # Two conditions - Strict and Loose. Start with one condition.
             wait_begin = time.time()
             if not self.finish_() and self.mapper_running:
-                pass
+               pass
+               # Need to implement logic to wait here until syncing with the mapper - TBD
+               # Two conditions - Strict and Loose. Start with one condition.
+                # while not self.rx_backend_msg:
+                #     continue
+
+                # # Reset sync parameter for next frame
+                # self.rx_backend_msg = False
+
                 # if self.sync_tracker2mapper_method == "strict":
                 #     if (frame_id + 1) % self.sync_tracker2mapper_frames == 0:
                 #         with self._mapper2tracker_call:
@@ -510,22 +570,22 @@ class TrackingProcess(Tracker):
             wait_end = time.time()
 
             
-            # Reimplement - Listener for M2T subscriber and corresponding Messages
-            self.unpack_map_to_tracker()
+            # # Reimplement - Listener for M2T subscriber and corresponding Messages
+            # self.unpack_map_to_tracker() # Delete this after listener is implemented
 
             self.update_last_mapper_render(frame)
 
-            # Reimplement - Publisher T2G and corresponding messages
-            self.update_viewer(frame)
+            # # Reimplement - Publisher T2G and corresponding messages
+            # self.update_viewer(frame)
 
             move_to_cpu(frame)
 
             self.time += 1
 
         # Signal to mapper to finish and save trajectory - Needs to be reimplemented (can have a boolean variable signalling this when sending each frame )
-        self.map_input["time"] = -1
-        self.send_frame_to_mapper()
-        self.save_traj(self.save_path)
+        self.map_input["finish"] = True
+        self.publish_to_backend()
+        #self.save_traj(self.save_path)
 
         # Finish in a synchronized fashion if possible - reimplement
         # self._end[0] = 1
@@ -536,14 +596,39 @@ class TrackingProcess(Tracker):
         print("track finish")
 
 
-    def send_frame_to_mapper(self):
-        # Implement sending info to mapper via ROS topics
-        print("tracker send frame {} to mapper".format(self.map_input["time"]))
-        # self._tracker2mapper_call.acquire()
-        # self._tracker2mapper_frame_queue.put(self.map_input)
-        # self.map_process._requests[0] = True
-        # self._tracker2mapper_call.notify()
-        # self._tracker2mapper_call.release()
+    def convert_from_b2f_ros_msg(self, b2f_msg):
+        last_frame_id = b2f_msg.frame_id
+
+        frame_info = self.dataset_cameras[last_frame_id]
+        last_frame = loadCam(self.args, last_frame_id, frame_info, 1)
+
+        last_frame.R = convert_ros_multi_array_message_to_tensor(b2f_msg.frame.rot, self.device)
+        last_frame.T = convert_ros_multi_array_message_to_tensor(b2f_msg.frame.trans, self.device)
+
+
+        submap_gaussians = GaussianPointCloud(self.args)
+        # submap_gaussians.training_setup(self.opt)
+
+        submap_gaussians._xyz = convert_ros_multi_array_message_to_tensor(b2f_msg.xyz, self.device)
+        submap_gaussians._opacity = convert_ros_multi_array_message_to_tensor(b2f_msg.opacity, self.device)
+        submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.scaling, self.device)
+        submap_gaussians._rotation = convert_ros_multi_array_message_to_tensor(b2f_msg.rotation, self.device)
+
+        submap_gaussians._shs = convert_ros_multi_array_message_to_tensor(b2f_msg.shs, self.device) # How to convert shs to features (both dc and rest??)
+        #submap_gaussians._features_dc = convert_ros_multi_array_message_to_tensor(b2f_msg.gaussian.features_dc, self.device)
+        #submap_gaussians._features_rest = convert_ros_multi_array_message_to_tensor(b2f_msg.gaussian.features_rest, self.device)
+        
+
+        submap_gaussians.radius = convert_ros_array_message_to_tensor(b2f_msg.radius, self.device)
+        submap_gaussians.normal = convert_ros_array_message_to_tensor(b2f_msg.normal, self.device)
+        submap_gaussians.confidence = convert_ros_array_message_to_tensor(b2f_msg.confidence, self.device)
+
+        return last_frame_id, last_frame, submap_gaussians
+
+    def b2f_listener_callback(self, b2f_msg):
+        self.get_logger().info(f'Rx from Backend Node {b2f_msg.msg}')
+        self.last_mapper_frame_id, self.last_frame, self.last_global_params = self.convert_from_b2f_ros_msg(b2f_msg)
+        self.rx_backend_msg = True
 
     def finish_(self):
         if self.use_online_scanner:
