@@ -450,8 +450,8 @@ class TrackingProcess(Tracker):
 
         self.queue_size = 100
         self.msg_counter = 0
-        self.f2b_publisher = self.create_publisher(F2B,'Front2Back',self.queue_size)
-        self.f2g_publisher = self.create_publisher(F2G,'Front2GUI',self.queue_size)
+        self.f2b_publisher = self.create_publisher(F2B,'/Front2Back',self.queue_size)
+        self.f2g_publisher = self.create_publisher(F2G,'/Front2GUI',self.queue_size)
         self.b2f_subscriber = self.create_subscription(B2F, '/Back2Front', self.b2f_listener_callback, self.queue_size)
         self.b2f_subscriber  # prevent unused variable warning
 

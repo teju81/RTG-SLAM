@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'slam_frontend = rtgslam_ros.SLAM.multiprocess.tracker:main',
+            'slam_backend = rtgslam_ros.SLAM.multiprocess.mapper:main',
         ],
     },
 )

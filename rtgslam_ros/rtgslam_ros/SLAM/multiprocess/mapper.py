@@ -16,6 +16,11 @@ from cuda_utils._C import accumulate_gaussian_error
 from rtgslam_ros.utils.monitor import Recorder
 
 
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+import threading
+
 from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
 from rtgslam_ros.utils.ros_utils import (
     convert_ros_array_message_to_tensor, 
@@ -25,8 +30,15 @@ from rtgslam_ros.utils.ros_utils import (
     convert_ros_multi_array_message_to_numpy, 
 )
 
-class Mapping(object):
+from argparse import ArgumentParser
+from rtgslam_ros.utils.config_utils import read_config
+from rtgslam_ros.arguments import DatasetParams, MapParams, OptimizationParams
+from rtgslam_ros.scene import Dataset
+from rtgslam_ros.utils.general_utils import safe_state
+
+class Mapping(Node):
     def __init__(self, args, recorder=None) -> None:
+        super().__init__('tracker_backend_node')
         self.temp_pointcloud = GaussianPointCloud(args)
         self.pointcloud = GaussianPointCloud(args)
         self.stable_pointcloud = GaussianPointCloud(args)
@@ -1149,25 +1161,11 @@ class Mapping(object):
 
 class MappingProcess(Mapping):
     def __init__(self, map_params, optimization_params, dataset, args):
-        super().__init__(map_params)
-        self.recorder = Recorder(map_params.device_list[0])
+        super().__init__(args)
+        self.recorder = Recorder(args.device_list[0])
         print("finish init")
 
-        # self.slam = slam
-        # # tracker 2 mapper
-        # self._tracker2mapper_call = slam._tracker2mapper_call
-        # self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
-
-        # # mapper 2 system
-        # self._mapper2system_call = slam._mapper2system_call
-        # self._mapper2system_map_queue = slam._mapper2system_map_queue
-        # self._mapper2system_tb_queue = slam._mapper2system_tb_queue
-        # self._mapper2system_requires = slam._mapper2system_requires
-
-        # # mapper 2 tracker
-        # self._mapper2tracker_call = slam._mapper2tracker_call
-        # self._mapper2tracker_map_queue = slam._mapper2tracker_map_queue
-
+        self.args = args
         self._requests = [False, False]  # [frame process, global optimization]
         self._stop = False
         self.input = {}
@@ -1175,15 +1173,15 @@ class MappingProcess(Mapping):
         self.processed_tick = []
         self.time = 0
         self.optimization_params = optimization_params
-        self._end = slam._end
         self.max_frame_id = -1
 
         self.finish = False
+        self.device="cuda"
         self.map_info = {}
 
         self.queue_size = 100
         self.msg_counter = 0
-        self.f2b_publisher = self.create_publisher(B2F,'/Back2Front',self.queue_size)
+        self.b2f_publisher = self.create_publisher(B2F,'/Back2Front',self.queue_size)
 
         self.f2b_subscriber = self.create_subscription(F2B, '/Front2Back', self.f2b_listener_callback, self.queue_size)
         self.f2b_subscriber  # prevent unused variable warning
@@ -1268,7 +1266,7 @@ class MappingProcess(Mapping):
         self.max_frame_id = max(self.max_frame_id, self.input["time"])
 
 
-        if not self.finish
+        if not self.finish:
             print("map run...")
             
             # run frame map update
