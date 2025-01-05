@@ -15,6 +15,16 @@ from rtgslam_ros.utils.loss_utils import l1_loss, l2_loss, ssim
 from cuda_utils._C import accumulate_gaussian_error
 from rtgslam_ros.utils.monitor import Recorder
 
+
+from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
+from rtgslam_ros.utils.ros_utils import (
+    convert_ros_array_message_to_tensor, 
+    convert_ros_multi_array_message_to_tensor, 
+    convert_tensor_to_ros_message, 
+    convert_numpy_array_to_ros_message, 
+    convert_ros_multi_array_message_to_numpy, 
+)
+
 class Mapping(object):
     def __init__(self, args, recorder=None) -> None:
         self.temp_pointcloud = GaussianPointCloud(args)
@@ -1168,7 +1178,15 @@ class MappingProcess(Mapping):
         self._end = slam._end
         self.max_frame_id = -1
 
-        self.finish = mp.Condition()
+        self.finish = False
+        self.map_info = {}
+
+        self.queue_size = 100
+        self.msg_counter = 0
+        self.f2b_publisher = self.create_publisher(B2F,'/Back2Front',self.queue_size)
+
+        self.f2b_subscriber = self.create_subscription(F2B, '/Front2Back', self.f2b_listener_callback, self.queue_size)
+        self.f2b_subscriber  # prevent unused variable warning
 
     def set_input(self):
         self.frame_map["depth_map"] = self.input["depth_map"]
@@ -1207,41 +1225,51 @@ class MappingProcess(Mapping):
             else:
                 del x
 
-    def pack_map_to_tracker(self):
-        map_info = {
-            "frame": copy.deepcopy(self.frame),
-            "global_params": self.global_params_detach,
-            "frame_id": self.processed_tick[-1],
-        }
-        print("mapper send map {} to tracker".format(self.processed_tick[-1]))
-
-        # Reimplement this part - TBD
-        # with self._mapper2tracker_call:
-        #     self._mapper2tracker_map_queue.put(map_info)
-        #     self._mapper2tracker_call.notify()
-
-    def run(self):
-        while True:
-            print("waiting tracker to wakeup")
-
-            # Need to reimplement the subscriber that listens to tracker - TBD
-            # Rxs self.input from tracker which is basically the frame information
-
-            # with self._tracker2mapper_call:
-            #     if self._tracker2mapper_frame_queue.qsize() == 0:
-            #         print("waiting tracker to wakeup")
-            #         self._tracker2mapper_call.wait()
-            #     self.input = self._tracker2mapper_frame_queue.get() - Replace this with ros2 topic
-            #     self.max_frame_id = max(self.max_frame_id, self.input["time"])
+    def convert_from_f2b_ros_msg(self, f2b_msg):
 
 
-            # This part goes into the listener
+        self.frame_map["depth_map"] = self.input["depth_map"]
+        self.frame_map["color_map"] = self.input["color_map"]
+        self.frame_map["normal_map_c"] = self.input["normal_map_c"]
+        self.frame_map["normal_map_w"] = self.input["normal_map_w"]
+        self.frame_map["vertex_map_c"] = self.input["vertex_map_c"]
+        self.frame_map["vertex_map_w"] = self.input["vertex_map_w"]
+        self.frame = self.input["frame"]
+        self.time = self.input["time"]
+        self.last_send_time = -1
+
+
+        self.input["color_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.color_map, self.device)
+        self.input["depth_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.depth_map, self.device)
+        self.input["normal_map_c"] = convert_ros_multi_array_message_to_tensor(b2f_msg.normal_map_c, self.device)
+        self.input["normal_map_w"] = convert_ros_multi_array_message_to_tensor(b2f_msg.normal_map_w, self.device)
+        self.input["vertex_map_c"] = convert_ros_multi_array_message_to_tensor(b2f_msg.vertex_map_c, self.device)
+        self.input["vertex_map_w"] = convert_ros_multi_array_message_to_tensor(b2f_msg.vertex_map_w, self.device)
+        # self.input["confidence_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.confidence_map, self.device)
+        # self.input["invalid_confidence_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.invalid_confidence_map, self.device)
+
+
+        self.input["time"] = f2b_msg.time
+
+        frame_id = self.input["time"]
+        frame_info = self.dataset_cameras[frame_id]
+        self.input["frame"] = loadCam(self.args, frame_id, frame_info, 1)
+
+        self.finish = f2b_msg.finish
+
+        #submap_gaussians.normal = convert_ros_array_message_to_tensor(b2f_msg.normal, self.device)
+
+        return
+
+
+    def f2b_listener_callback(self, f2b_msg):
+        self.get_logger().info(f'Rx from Frontend Node {f2b_msg.msg}')
+        self.convert_from_f2b_ros_msg(f2b_msg)
+        self.max_frame_id = max(self.max_frame_id, self.input["time"])
+
+
+        if not self.finish
             print("map run...")
-
-            # TODO: debug input is None (used for exiting after tracker finishes and signals an invalid timestamp, Exiting the while loop)
-            if "time" in self.input and self.input["time"] == -1:
-                del self.input
-                break
             
             # run frame map update
             self.set_input()
@@ -1249,27 +1277,78 @@ class MappingProcess(Mapping):
             self.mapping(self.frame, self.frame_map, self.input["time"], self.optimization_params)
 
             # Send map to tracker - reimplement using ros2 topics TBD
-            self.pack_map_to_tracker()
+            self.publish_to_frontend()
+        else:
+            print("Exit signalled from frontend!!! Exiting...")
 
 
-        # self.release_receive()
+    def convert_to_b2f_ros_msg(self):
+
+        b2f_msg = B2F()
+
+        b2f_msg.msg = f'Hello world {self.msg_counter}'
+
+        b2f_msg.last_frame_id = self.map_info["frame_id"]
+
+        # Sending the frame
+        b2f_msg.last_frame.uid = self.map_info["frame"].uid
+        b2f_msg.last_frame.rot = convert_numpy_array_to_ros_message(self.map_info["frame"].R)
+        b2f_msg.last_frame.trans = self.map_info["frame"].T.tolist()
+        b2f_msg.last_frame.fovx = self.map_info["frame"].FoVx
+        b2f_msg.last_frame.fovy = self.map_info["frame"].FoVy
+        b2f_msg.last_frame.timestamp = self.map_info["frame"].timestamp
+        b2f_msg.last_frame.depth_scale = self.map_info["frame"].depth_scale
+        b2f_msg.last_frame.original_image = convert_tensor_to_ros_message(self.map_info["frame"].original_image)
+        b2f_msg.last_frame.image_width = self.map_info["frame"].image_width
+        b2f_msg.last_frame.image_height = self.map_info["frame"].image_height
+        b2f_msg.last_frame.original_depth = convert_tensor_to_ros_message(self.map_info["frame"].original_depth)
+        b2f_msg.last_frame.cx = self.map_info["frame"].cx
+        b2f_msg.last_frame.cy = self.map_info["frame"].cy
+
+        #Gaussian Map
+        b2f_msg.last_global_params.xyz = convert_tensor_to_ros_message(self.map_info["global_params"]["xyz"])
+        b2f_msg.last_global_params.opacity = convert_tensor_to_ros_message(self.map_info["global_params"]["opacity"])
+        b2f_msg.last_global_params.scales = convert_tensor_to_ros_message(self.map_info["global_params"]["scales"])
+        b2f_msg.last_global_params.rotations = convert_tensor_to_ros_message(self.map_info["global_params"]["rotations"])
+        b2f_msg.last_global_params.shs = convert_tensor_to_ros_message(self.map_info["global_params"]["shs"])
+        b2f_msg.last_global_params.radius = convert_tensor_to_ros_message(self.map_info["global_params"]["radius"])
+        b2f_msg.last_global_params.normal = convert_tensor_to_ros_message(self.map_info["global_params"]["normal"])
+        b2f_msg.last_global_params.confidence = convert_tensor_to_ros_message(self.map_info["global_params"]["confidence"])
+
+        return b2f_msg
+
+
+    def publish_to_frontend(self):
+
+        self.map_info = {
+            "frame": copy.deepcopy(self.frame),
+            "global_params": self.global_params_detach,
+            "frame_id": self.processed_tick[-1],
+        }
+        print("mapper send map {} to tracker".format(self.processed_tick[-1]))
+
+        # Implement sending info to mapper via ROS topics
+        b2f_msg = self.convert_to_b2f_ros_msg()
+        self.get_logger().info(f'Publishing to Frontend Node: {self.msg_counter}')
+        self.b2f_publisher.publish(b2f_msg)
+        self.msg_counter += 1
+
+    def run(self):
+        while True:
+            continue # Till exit is signalled by frontend
+
+        # Perform GLobal Optimization after SLAM is finished
         self.global_optimization(self.optimization_params)
-        self.time = -1
-        self.send_output()
+        #self.time = -1
+        #self.send_output()
         print("processed frames: ", self.optimize_frames_ids)
         print("keyframes: ", self.keyframe_ids)
-        # self._end[1] = 1
-        # with self._mapper2system_call:
-        #     self._mapper2system_call.notify()
 
-        # with self.finish:
-        #     print("mapper wating finish")
-        #     self.finish.wait()
         print("map finish")
 
-    def stop(self):
-        with self.finish:
-            self.finish.notify()
+    # def stop(self):
+    #     with self.finish:
+    #         self.finish.notify()
 
 def spin_thread(node):
     # Spin the node continuously in a separate thread

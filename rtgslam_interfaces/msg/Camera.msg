@@ -1,12 +1,11 @@
 int32 uid
-int32 colmap_id
 std_msgs/Float32MultiArray rot
 float32[] trans
-float32 FoVx
-float32 FoVy
+float32 fovx
+float32 fovy
 float32 timestamp
 float32 depth_scale
-std_msgs/Int32MultiArray original_image
+std_msgs/Float32MultiArray original_image
 int32 image_width
 int32 image_height
 std_msgs/Float32MultiArray original_depth

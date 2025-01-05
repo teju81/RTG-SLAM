@@ -17,7 +17,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import threading
 
-from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera
+from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
 from rtgslam_ros.utils.ros_utils import (
     convert_ros_array_message_to_tensor, 
     convert_ros_multi_array_message_to_tensor, 
@@ -470,6 +470,22 @@ class TrackingProcess(Tracker):
         f2b_msg = F2B()
 
         f2b_msg.msg = f'Hello world {self.msg_counter}'
+
+        # Sending the frame
+        f2b_msg.frame.uid = self.map_input["frame"].uid
+        f2b_msg.frame.rot = convert_numpy_array_to_ros_message(self.map_input["frame"].R)
+        f2b_msg.frame.trans = self.map_input["frame"].T.tolist()
+        f2b_msg.frame.fovx = self.map_input["frame"].FoVx
+        f2b_msg.frame.fovy = self.map_input["frame"].FoVy
+        f2b_msg.frame.timestamp = self.map_input["frame"].timestamp
+        f2b_msg.frame.depth_scale = self.map_input["frame"].depth_scale
+        f2b_msg.frame.original_image = convert_tensor_to_ros_message(self.map_input["frame"].original_image)
+        f2b_msg.frame.image_width = self.map_input["frame"].image_width
+        f2b_msg.frame.image_height = self.map_input["frame"].image_height
+        f2b_msg.frame.original_depth = convert_tensor_to_ros_message(self.map_input["frame"].original_depth)
+        f2b_msg.frame.cx = self.map_input["frame"].cx
+        f2b_msg.frame.cy = self.map_input["frame"].cy
+
         f2b_msg.time = self.map_input["time"]
         f2b_msg.color_map = convert_tensor_to_ros_message(self.map_input["color_map"])
         f2b_msg.depth_map = convert_tensor_to_ros_message(self.map_input["depth_map"])
@@ -482,25 +498,6 @@ class TrackingProcess(Tracker):
         f2b_msg.finish = self.map_input["finish"]
         if self.map_input["poses_new"] is not None:
             f2b_msg.poses_new = convert_tensor_to_ros_message(self.map_input["poses_new"])
-        f2b_msg.frame.uid = self.map_input["frame"].uid
-        f2b_msg.frame.rot = convert_numpy_array_to_ros_message(self.map_input["frame"].R)
-        print(self.map_input["frame"].T)
-        f2b_msg.frame.trans = self.map_input["frame"].T.tolist()
-        f2b_msg.frame.fx = self.map_input["frame"].fx
-        f2b_msg.frame.fy = self.map_input["frame"].fy
-        f2b_msg.frame.cx = self.map_input["frame"].cx
-        f2b_msg.frame.cy = self.map_input["frame"].cy
-        f2b_msg.frame.fovx = self.map_input["frame"].fovx
-        f2b_msg.frame.fovy = self.map_input["frame"].fovy        
-        f2b_msg.frame.image = convert_tensor_to_ros_message(self.map_input["frame"].image)
-        f2b_msg.frame.image_path = self.map_input["frame"].image_path
-        f2b_msg.frame.image_width = self.map_input["frame"].image_width
-        f2b_msg.frame.image_height = self.map_input["frame"].image_height
-        f2b_msg.frame.image_name = self.map_input["frame"].image_name
-        f2b_msg.frame.depth_path = self.map_input["frame"].depth_path
-        f2b_msg.frame.pose_gt = convert_tensor_to_ros_message(self.map_input["frame"].pose_gt)
-        f2b_msg.frame.depth_scale = self.map_input["frame"].depth_scale
-        f2b_msg.frame.timestamp = self.map_input["frame"].timestamp
 
         return f2b_msg
 
@@ -611,7 +608,7 @@ class TrackingProcess(Tracker):
 
         submap_gaussians._xyz = convert_ros_multi_array_message_to_tensor(b2f_msg.xyz, self.device)
         submap_gaussians._opacity = convert_ros_multi_array_message_to_tensor(b2f_msg.opacity, self.device)
-        submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.scaling, self.device)
+        submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.scales, self.device)
         submap_gaussians._rotation = convert_ros_multi_array_message_to_tensor(b2f_msg.rotation, self.device)
 
         submap_gaussians._shs = convert_ros_multi_array_message_to_tensor(b2f_msg.shs, self.device) # How to convert shs to features (both dc and rest??)
@@ -619,7 +616,7 @@ class TrackingProcess(Tracker):
         #submap_gaussians._features_rest = convert_ros_multi_array_message_to_tensor(b2f_msg.gaussian.features_rest, self.device)
         
 
-        submap_gaussians.radius = convert_ros_array_message_to_tensor(b2f_msg.radius, self.device)
+        #submap_gaussians.radius = convert_ros_array_message_to_tensor(b2f_msg.radius, self.device)
         submap_gaussians.normal = convert_ros_array_message_to_tensor(b2f_msg.normal, self.device)
         submap_gaussians.confidence = convert_ros_array_message_to_tensor(b2f_msg.confidence, self.device)
 
