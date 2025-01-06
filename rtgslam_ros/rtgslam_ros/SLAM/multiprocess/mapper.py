@@ -21,6 +21,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import threading
 
+from rtgslam_ros.utils.camera_utils import loadCam
 from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
 from rtgslam_ros.utils.ros_utils import (
     convert_ros_array_message_to_tensor, 
@@ -1175,6 +1176,9 @@ class MappingProcess(Mapping):
         self.optimization_params = optimization_params
         self.max_frame_id = -1
 
+        self.dataset = dataset
+        self.dataset_cameras = self.dataset.scene_info.train_cameras
+
         self.finish = False
         self.device="cuda"
         self.map_info = {}
@@ -1225,26 +1229,14 @@ class MappingProcess(Mapping):
 
     def convert_from_f2b_ros_msg(self, f2b_msg):
 
-
-        self.frame_map["depth_map"] = self.input["depth_map"]
-        self.frame_map["color_map"] = self.input["color_map"]
-        self.frame_map["normal_map_c"] = self.input["normal_map_c"]
-        self.frame_map["normal_map_w"] = self.input["normal_map_w"]
-        self.frame_map["vertex_map_c"] = self.input["vertex_map_c"]
-        self.frame_map["vertex_map_w"] = self.input["vertex_map_w"]
-        self.frame = self.input["frame"]
-        self.time = self.input["time"]
-        self.last_send_time = -1
-
-
-        self.input["color_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.color_map, self.device)
-        self.input["depth_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.depth_map, self.device)
-        self.input["normal_map_c"] = convert_ros_multi_array_message_to_tensor(b2f_msg.normal_map_c, self.device)
-        self.input["normal_map_w"] = convert_ros_multi_array_message_to_tensor(b2f_msg.normal_map_w, self.device)
-        self.input["vertex_map_c"] = convert_ros_multi_array_message_to_tensor(b2f_msg.vertex_map_c, self.device)
-        self.input["vertex_map_w"] = convert_ros_multi_array_message_to_tensor(b2f_msg.vertex_map_w, self.device)
-        # self.input["confidence_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.confidence_map, self.device)
-        # self.input["invalid_confidence_map"] = convert_ros_multi_array_message_to_tensor(b2f_msg.invalid_confidence_map, self.device)
+        self.input["color_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.color_map, self.device)
+        self.input["depth_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.depth_map, self.device)
+        self.input["normal_map_c"] = convert_ros_multi_array_message_to_tensor(f2b_msg.normal_map_c, self.device)
+        self.input["normal_map_w"] = convert_ros_multi_array_message_to_tensor(f2b_msg.normal_map_w, self.device)
+        self.input["vertex_map_c"] = convert_ros_multi_array_message_to_tensor(f2b_msg.vertex_map_c, self.device)
+        self.input["vertex_map_w"] = convert_ros_multi_array_message_to_tensor(f2b_msg.vertex_map_w, self.device)
+        # self.input["confidence_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.confidence_map, self.device)
+        # self.input["invalid_confidence_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.invalid_confidence_map, self.device)
 
 
         self.input["time"] = f2b_msg.time
@@ -1255,7 +1247,7 @@ class MappingProcess(Mapping):
 
         self.finish = f2b_msg.finish
 
-        #submap_gaussians.normal = convert_ros_array_message_to_tensor(b2f_msg.normal, self.device)
+        #submap_gaussians.normal = convert_ros_array_message_to_tensor(f2b_msg.normal, self.device)
 
         return
 
@@ -1264,27 +1256,37 @@ class MappingProcess(Mapping):
         self.get_logger().info(f'Rx from Frontend Node {f2b_msg.msg}')
         self.convert_from_f2b_ros_msg(f2b_msg)
         self.max_frame_id = max(self.max_frame_id, self.input["time"])
+        if f2b_msg.msg == "init":
+            msg = "init"
+        elif f2b_msg.msg == "keyframe":
+            msg = "local"
+        elif f2b_msg.msg == "finish":
+            msg = "global"
+            # Perform GLobal Optimization after SLAM is finished
+            self.global_optimization(self.optimization_params)
+            #self.time = -1
+            #self.send_output()
+            print("processed frames: ", self.optimize_frames_ids)
+            print("keyframes: ", self.keyframe_ids)
 
+            print("map finish")
 
         if not self.finish:
             print("map run...")
-            
             # run frame map update
             self.set_input()
             self.processed_tick.append(self.time)
             self.mapping(self.frame, self.frame_map, self.input["time"], self.optimization_params)
-
-            # Send map to tracker - reimplement using ros2 topics TBD
-            self.publish_to_frontend()
         else:
             print("Exit signalled from frontend!!! Exiting...")
+
+        # Send map to tracker - reimplement using ros2 topics TBD
+        self.publish_to_frontend(msg)
 
 
     def convert_to_b2f_ros_msg(self):
 
         b2f_msg = B2F()
-
-        b2f_msg.msg = f'Hello world {self.msg_counter}'
 
         b2f_msg.last_frame_id = self.map_info["frame_id"]
 
@@ -1316,7 +1318,7 @@ class MappingProcess(Mapping):
         return b2f_msg
 
 
-    def publish_to_frontend(self):
+    def publish_to_frontend(self, msg="default"):
 
         self.map_info = {
             "frame": copy.deepcopy(self.frame),
@@ -1327,22 +1329,14 @@ class MappingProcess(Mapping):
 
         # Implement sending info to mapper via ROS topics
         b2f_msg = self.convert_to_b2f_ros_msg()
-        self.get_logger().info(f'Publishing to Frontend Node: {self.msg_counter}')
+        b2f_msg.msg = msg
+        self.get_logger().info(f'{b2f_msg.msg}: Publishing to Frontend Node: {self.msg_counter}')
         self.b2f_publisher.publish(b2f_msg)
         self.msg_counter += 1
 
     def run(self):
         while True:
             continue # Till exit is signalled by frontend
-
-        # Perform GLobal Optimization after SLAM is finished
-        self.global_optimization(self.optimization_params)
-        #self.time = -1
-        #self.send_output()
-        print("processed frames: ", self.optimize_frames_ids)
-        print("keyframes: ", self.keyframe_ids)
-
-        print("map finish")
 
     # def stop(self):
     #     with self.finish:

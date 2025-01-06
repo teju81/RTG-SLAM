@@ -2,7 +2,7 @@
 std_msgs/Float32MultiArray xyz
 std_msgs/Float32MultiArray opacity
 std_msgs/Float32MultiArray scales
-std_msgs/Float32MultiArray rotation
+std_msgs/Float32MultiArray rotations
 std_msgs/Float32MultiArray shs #features
 
 # map management paramters

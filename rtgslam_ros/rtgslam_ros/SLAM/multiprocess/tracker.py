@@ -432,6 +432,13 @@ class TrackingProcess(Tracker):
         self.mapper_running = True
 
 
+        self.frame = None
+        self.frame_id = None
+        self.pause = False
+        self.requested_init = False
+        self.reset = True
+
+
         self.dataset = dataset
 
         self.dataset_cameras = self.dataset.scene_info.train_cameras
@@ -501,28 +508,14 @@ class TrackingProcess(Tracker):
 
         return f2b_msg
 
-    def publish_to_backend(self):
+    def publish_to_backend(self, msg="default"):
         # Implement sending info to mapper via ROS topics
         print("tracker send frame {} to mapper".format(self.map_input["time"]))
         f2b_msg = self.convert_to_f2b_ros_msg()
-        self.get_logger().info(f'Publishing to Backend Node: {self.msg_counter}')
+        f2b_msg.msg = msg
+        self.get_logger().info(f'{f2b_msg.msg}: Publishing to Backend Node: {self.msg_counter}')
         self.f2b_publisher.publish(f2b_msg)
         self.msg_counter += 1
-
-
-    def initialize(self):
-        
-        # Gets called when the first frame is acquired
-        # Reset everything here
-
-        self.request_init()
-        self.reset = False
-
-    def request_init(self):
-        # Publish an init message to backend
-        self.publish_message_to_backend("init", cur_frame_idx, viewpoint, depth_map)
-        self.requested_init = True
-
 
 
 # Requirements:
@@ -532,7 +525,7 @@ class TrackingProcess(Tracker):
 # a) Speed of the tracker and mapper determine how fast robots explore the space (need to profile these algorithms for running time)
 # b) Blurred images are useless (??) - Blur speed of the cameras needs to be measured
 
-# 2) Ideally we want to automate this proess (Active SLAM) - for now we can assume it is done manually
+# 2) Ideally we want to automate this process (Active SLAM) - for now we can assume it is done manually
 # (i) If manually done, you have to signal to the teleoperator to pause (when tracker and mapper need to catchup with each other, or tracking failure events)
 # (a) Live reconstruction may be useful to the teleoperator - spend more time in poorly reconstructed areas, problematic areas, things that require zoom-in, holes, etc.
 
@@ -566,6 +559,33 @@ class TrackingProcess(Tracker):
 # 4) Does incorrect poses lead to poor maps? Can the
 
 
+
+    def acquire_frame_and_track(self, msg="default"):
+
+        self.frame = self.getNextFrame()
+        if self.frame is None:
+            print("Need help!!! frame is returning None....")
+        self.frame_id = self.frame.uid
+        print("current tracker frame = %d" % self.time)
+        # update current map
+        move_to_gpu(self.frame)
+
+        self.map_preprocess_mp(self.frame, self.frame_id)
+        self.tracking(self.frame, self.map_input)
+        self.map_input["frame"] = copy.deepcopy(self.frame)
+        self.map_input["frame"] = self.frame
+        self.map_input["poses_new"] = self.get_new_poses() # Depends on ORBSLAM backend for tracker
+
+        self.publish_to_backend(msg)
+        self.update_last_mapper_render(self.frame)
+
+        # # Reimplement - Publisher T2G and corresponding messages
+        # self.update_viewer(self.frame)
+
+        move_to_cpu(self.frame)
+
+        self.time += 1
+
     def run(self):
         self.time = 0
         self.initialize_orb()
@@ -577,91 +597,30 @@ class TrackingProcess(Tracker):
 
             if self.requested_init:
                 # self.requested_init is made False in the listener after hearing from mapper
+                print("Waiting for reply from mapper to init message....")
                 continue
 
             if self.reset:
-                self.initialize()
-                continue
 
+                # All code to initialize and reset system to be put here
+
+                # Acquire First Frame
+                self.acquire_frame_and_track("init")
+                self.requested_init = True
+                self.reset = False
 
             # Reach here if not paused, reset is done, requested_init is acknowledged by mapper
-
             # At this point you have a gaussian map and the next frame
+            
+            # Handle synchronization here
+            # For now it is strictly back and forth - comes at the cost of real-time operation and not even realistic as robot needs to pause exploration
 
-            frame = self.getNextFrame()
-            if frame is None:
-                break
-            frame_id = frame.uid
-            print("current tracker frame = %d" % self.time)
-            # update current map
-            move_to_gpu(frame)
-
-            self.map_preprocess_mp(frame, frame_id)
-            self.tracking(frame, self.map_input)
-            self.map_input["frame"] = copy.deepcopy(frame)
-            self.map_input["frame"] = frame
-
-            self.map_input["poses_new"] = self.get_new_poses()
-
-            # send message to mapper - Implement T2M publisher and corresponding Messages
-            self.publish_to_backend()
-
-            # Need to reimplement this process of keeping in sync with the mapper.
-            wait_begin = time.time()
-            if not self.finish_() and self.mapper_running:
-               pass
-               # Need to implement logic to wait here until syncing with the mapper - TBD
-               # Two conditions - Strict and Loose. Start with one condition.
-                # while not self.rx_backend_msg:
-                #     continue
-
-                # # Reset sync parameter for next frame
-                # self.rx_backend_msg = False
-
-                # if self.sync_tracker2mapper_method == "strict":
-                #     if (frame_id + 1) % self.sync_tracker2mapper_frames == 0:
-                #         with self._mapper2tracker_call:
-                #             print("wait mapper to wakeup")
-                #             print(
-                #                 "tracker buffer size: {}".format(
-                #                     self._tracker2mapper_frame_queue.qsize()
-                #                 )
-                #             )
-                #             self._mapper2tracker_call.wait()
-                # elif self.sync_tracker2mapper_method == "loose":
-                #     if (
-                #         frame_id - self.last_mapper_frame_id
-                #     ) > self.sync_tracker2mapper_frames:
-                #         with self._mapper2tracker_call:
-                #             print("wait mapper to wakeup")
-                #             self._mapper2tracker_call.wait()
-                # else:
-                #     pass
-            wait_end = time.time()
-
-            # # Reimplement - Listener for M2T subscriber and corresponding Messages
-            # self.unpack_map_to_tracker() # Delete this after listener is implemented
-
-            self.update_last_mapper_render(frame)
-
-            # # Reimplement - Publisher T2G and corresponding messages
-            # self.update_viewer(frame)
-
-            move_to_cpu(frame)
-
-            self.time += 1
+            # Handle keyframe management here - for now nothing to be done as every frame is a keyframe
 
         # Signal to mapper to finish and save trajectory - Needs to be reimplemented (can have a boolean variable signalling this when sending each frame )
         self.map_input["finish"] = True
-        self.publish_to_backend()
+        self.publish_to_backend("finish")
         #self.save_traj(self.save_path)
-
-        # Finish in a synchronized fashion if possible - reimplement
-        # self._end[0] = 1
-        # with self.finish:
-        #     print("tracker wating finish")
-        #     self.finish.wait()
-
         print("track finish")
 
 
@@ -697,7 +656,18 @@ class TrackingProcess(Tracker):
     def b2f_listener_callback(self, b2f_msg):
         self.get_logger().info(f'Rx from Backend Node {b2f_msg.msg}')
         self.last_mapper_frame_id, self.last_frame, self.last_global_params = self.convert_from_b2f_ros_msg(b2f_msg)
-        self.rx_backend_msg = True
+
+        if b2f_msg.msg == "init":
+            # Received acknowledgement for init message
+            self.requested_init = False
+        if b2f_msg.msg == "sync":
+            pass
+
+        # Acquire and track next keyframe
+        self.acquire_frame_and_track("keyframe")
+        
+
+
 
     def finish_(self):
         if self.use_online_scanner:
