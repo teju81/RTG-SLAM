@@ -1312,6 +1312,7 @@ class MappingProcess(Mapping):
         b2f_msg.last_global_params.rotations = convert_tensor_to_ros_message(self.map_info["global_params"]["rotations"])
         b2f_msg.last_global_params.shs = convert_tensor_to_ros_message(self.map_info["global_params"]["shs"])
         b2f_msg.last_global_params.radius = convert_tensor_to_ros_message(self.map_info["global_params"]["radius"])
+
         b2f_msg.last_global_params.normal = convert_tensor_to_ros_message(self.map_info["global_params"]["normal"])
         b2f_msg.last_global_params.confidence = convert_tensor_to_ros_message(self.map_info["global_params"]["confidence"])
 
@@ -1336,6 +1337,7 @@ class MappingProcess(Mapping):
 
     def run(self):
         while True:
+            time.sleep(0.01)
             continue # Till exit is signalled by frontend
 
     # def stop(self):

@@ -152,6 +152,7 @@ class Tracker(Node):
         normal_map_c = compute_normal_map(vertex_map_c)
         confidence_map = compute_confidence_map(normal_map_c, intrinsic)
 
+
         # confidence_threshold tum: 0.5, others: 0.2
         invalid_confidence_mask = ((normal_map_c == 0).all(dim=-1)) | (
             confidence_map < self.invalid_confidence_thresh
@@ -305,10 +306,13 @@ class Tracker(Node):
         else:
             # initialize
             if not self.status["initialized"]:
+                print("Initializing tracker!!!")
                 self.initialize_tracker()
                 pose_t1_w = np.eye(4)
             else:
+                print("Prediction step")
                 pose_t1_t0, tracking_success = self.icp_tracker.predict_pose(self.curr_frame)
+                print("Refinement step")
                 if self.use_orb_backend:
                     pose_t1_w = self.refine_icp_pose(pose_t1_t0, tracking_success)
                 else:
@@ -324,6 +328,8 @@ class Tracker(Node):
         frame_map["normal_map_w"] = transform_map(
             frame_map["normal_map_c"], get_rot(frame.get_c2w)
         )
+        print(f"Tracking status: {tracking_success}!!")
+
 
         return tracking_success
 
@@ -597,7 +603,7 @@ class TrackingProcess(Tracker):
 
             if self.requested_init:
                 # self.requested_init is made False in the listener after hearing from mapper
-                print("Waiting for reply from mapper to init message....")
+                time.sleep(0.01)
                 continue
 
             if self.reset:
@@ -625,33 +631,43 @@ class TrackingProcess(Tracker):
 
 
     def convert_from_b2f_ros_msg(self, b2f_msg):
-        last_frame_id = b2f_msg.frame_id
+        last_frame_id = b2f_msg.last_frame_id
 
         frame_info = self.dataset_cameras[last_frame_id]
         last_frame = loadCam(self.args, last_frame_id, frame_info, 1)
 
-        last_frame.R = convert_ros_multi_array_message_to_tensor(b2f_msg.frame.rot, self.device)
-        last_frame.T = convert_ros_multi_array_message_to_tensor(b2f_msg.frame.trans, self.device)
+        last_frame.R = convert_ros_multi_array_message_to_tensor(b2f_msg.last_frame.rot, self.device)
+        last_frame.T = convert_ros_array_message_to_tensor(b2f_msg.last_frame.trans, self.device)
 
 
         submap_gaussians = GaussianPointCloud(self.args)
         # submap_gaussians.training_setup(self.opt)
 
-        submap_gaussians._xyz = convert_ros_multi_array_message_to_tensor(b2f_msg.xyz, self.device)
-        submap_gaussians._opacity = convert_ros_multi_array_message_to_tensor(b2f_msg.opacity, self.device)
-        submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.scales, self.device)
-        submap_gaussians._rotation = convert_ros_multi_array_message_to_tensor(b2f_msg.rotation, self.device)
+        submap_gaussians._xyz = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.xyz, self.device)
+        submap_gaussians._opacity = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.opacity, self.device)
+        submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.scales, self.device)
+        submap_gaussians._rotation = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.rotations, self.device)
 
-        submap_gaussians._shs = convert_ros_multi_array_message_to_tensor(b2f_msg.shs, self.device) # How to convert shs to features (both dc and rest??)
-        #submap_gaussians._features_dc = convert_ros_multi_array_message_to_tensor(b2f_msg.gaussian.features_dc, self.device)
-        #submap_gaussians._features_rest = convert_ros_multi_array_message_to_tensor(b2f_msg.gaussian.features_rest, self.device)
+        submap_gaussians._shs = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.shs, self.device) # How to convert shs to features (both dc and rest??)
+        #submap_gaussians._features_dc = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.features_dc, self.device)
+        #submap_gaussians._features_rest = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.features_rest, self.device)
         
 
-        #submap_gaussians.radius = convert_ros_array_message_to_tensor(b2f_msg.radius, self.device)
-        submap_gaussians.normal = convert_ros_array_message_to_tensor(b2f_msg.normal, self.device)
-        submap_gaussians.confidence = convert_ros_array_message_to_tensor(b2f_msg.confidence, self.device)
+        #submap_gaussians.radius = convert_ros_array_message_to_tensor(b2f_msg.last_global_params.radius, self.device)
+        submap_gaussians._normal = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.normal, self.device)
+        submap_gaussians._confidence = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.confidence, self.device)
 
-        return last_frame_id, last_frame, submap_gaussians
+        last_global_prams = {
+            "xyz": submap_gaussians._xyz,
+            "opacity": submap_gaussians._opacity,
+            "scales": submap_gaussians._scaling,
+            "rotations": submap_gaussians._rotation,
+            "shs": submap_gaussians._shs,
+            "normal": submap_gaussians._normal,
+            "confidence": submap_gaussians._confidence,
+        }
+
+        return last_frame_id, last_frame, last_global_prams
 
     def b2f_listener_callback(self, b2f_msg):
         self.get_logger().info(f'Rx from Backend Node {b2f_msg.msg}')
@@ -665,9 +681,6 @@ class TrackingProcess(Tracker):
 
         # Acquire and track next keyframe
         self.acquire_frame_and_track("keyframe")
-        
-
-
 
     def finish_(self):
         if self.use_online_scanner:
