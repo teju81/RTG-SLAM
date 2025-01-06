@@ -5,7 +5,7 @@ import numpy as np
 import open3d as o3d
 import torch
 
-from monogs_ros.gaussian_splatting.utils.general_utils import (
+from rtgslam_ros.utils.general_utils import (
     build_scaling_rotation,
     strip_symmetric,
 )
@@ -90,18 +90,18 @@ class GaussianPacket:
         self.has_gaussians = False
         if gaussians is not None:
             self.has_gaussians = True
-            self.get_xyz = gaussians.get_xyz.detach().clone()
+            self.get_xyz = gaussians.get_xyz
             self.active_sh_degree = gaussians.active_sh_degree
-            self.get_opacity = gaussians.get_opacity.detach().clone()
-            self.get_scaling = gaussians.get_scaling.detach().clone()
-            self.get_rotation = gaussians.get_rotation.detach().clone()
+            self.get_opacity = gaussians.get_opacity
+            self.get_scaling = gaussians.get_scaling
+            self.get_rotation = gaussians.get_rotation
             self.max_sh_degree = gaussians.max_sh_degree
-            self.get_features = gaussians.get_features.detach().clone()
+            self.get_features = gaussians.get_features
 
-            self._rotation = gaussians._rotation.detach().clone()
+            self._rotation = gaussians._rotation
             self.rotation_activation = torch.nn.functional.normalize
-            self.unique_kfIDs = gaussians.unique_kfIDs.clone()
-            self.n_obs = gaussians.n_obs.clone()
+            #self.unique_kfIDs = gaussians.unique_kfIDs.clone()
+            self.n_obs = gaussians.get_points_num
 
         self.keyframe = keyframe
         self.current_frame = current_frame

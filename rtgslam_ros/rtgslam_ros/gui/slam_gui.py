@@ -9,13 +9,14 @@ import torch
 from torch import nn
 
 from std_msgs.msg import String, Float32MultiArray, Int32MultiArray, MultiArrayDimension
-from monogs_interfaces.msg import CameraMsg, G2F, F2G
+from rtgslam_interfaces.msg import G2F, F2G
 
-from monogs_ros.gaussian_splatting.utils.graphics_utils import getProjectionMatrix2
+#from monogs_ros.gaussian_splatting.utils.graphics_utils import getProjectionMatrix2
+#from monogs_ros.utils.config_utils import load_config
 
 import yaml
-from monogs_ros.utils.config_utils import load_config
-from monogs_ros.utils.ros_utils import (
+
+from rtgslam_ros.utils.ros_utils import (
     convert_ros_array_message_to_tensor, 
     convert_ros_multi_array_message_to_tensor, 
     convert_tensor_to_ros_message, 
@@ -24,7 +25,7 @@ from monogs_ros.utils.ros_utils import (
 )
 
 from munch import munchify
-from monogs_ros.gaussian_splatting.scene.gaussian_model import GaussianModel
+from rtgslam_ros.SLAM.gaussian_pointcloud import GaussianPointCloud
 
 import cv2
 import glfw
@@ -37,20 +38,19 @@ import torch
 import torch.nn.functional as F
 from OpenGL import GL as gl
 
-from monogs_ros.gaussian_splatting.gaussian_renderer import render
-from monogs_ros.gaussian_splatting.utils.graphics_utils import fov2focal, getWorld2View2
-from monogs_ros.gui.gl_render import util, util_gau
-from monogs_ros.gui.gl_render.render_ogl import OpenGLRenderer
-from monogs_ros.gui.gui_utils import (
+# from monogs_ros.gaussian_splatting.gaussian_renderer import render
+# from monogs_ros.gaussian_splatting.utils.graphics_utils import fov2focal, getWorld2View2
+from rtgslam_ros.gui.gl_render import util, util_gau
+from rtgslam_ros.gui.gl_render.render_ogl import OpenGLRenderer
+from rtgslam_ros.gui.gui_utils import (
     ParamsGUI,
     GaussianPacket,
     Packet_vis2main,
     create_frustum,
     cv_gl,
-    get_latest_queue,
 )
-from monogs_ros.utils.camera_utils import Camera
-from monogs_ros.utils.logging_utils import Log
+# from monogs_ros.utils.camera_utils import Camera
+# from monogs_ros.utils.logging_utils import Log
 
 
 import matplotlib.pyplot as plt
@@ -829,7 +829,7 @@ class SLAM_GUI(Node):
             self.in_depth_widget.update_image(rgb)
 
         if gaussian_packet.finish:
-            Log("Received terminate signal", tag="GUI")
+            #Log("Received terminate signal", tag="GUI")
             # # clean up the pipe
             # while not self.q_main2vis.empty():
             #     self.q_main2vis.get()
@@ -884,20 +884,22 @@ def main():
 
     params_gui = {}
 
-    base_config_file = "/root/code/monogs_ros_ws/src/monogs_ros/monogs_ros/configs/rgbd/tum/base_config.yaml"
+    parser = ArgumentParser(description="Training script parameters")
+    args = parser.parse_args()
+    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml"
+    args = read_config(config_path)
+    # set visible devices
+    device_list = args.device_list
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in device_list)
 
-    with open(base_config_file, "r") as yml:
-        base_config = yaml.safe_load(yml)
-        config_file = base_config["Dataset"]["dataset_config_file"]
-
-    config = load_config(config_file)
+    safe_state(args.quiet)
 
     pipeline_params = munchify(config["pipeline_params"])
     model_params = munchify(config["model_params"])
     bg_color = [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    gaussians = GaussianModel(model_params.sh_degree, config=config)
+    gaussians = GaussianPointCloud(args)
 
     params_gui = ParamsGUI(
                     pipe=pipeline_params,

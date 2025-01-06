@@ -25,14 +25,7 @@ from rtgslam_ros.utils.ros_utils import (
     convert_numpy_array_to_ros_message, 
     convert_ros_multi_array_message_to_numpy, 
 )
-# from rtgslam_ros.src.gui.gui_utils import (
-#     ParamsGUI,
-#     GaussianPacket,
-#     Packet_vis2main,
-#     create_frustum,
-#     cv_gl,
-#     get_latest_queue,
-# )
+from rtgslam_ros.gui.gui_utils import GaussianPacket
 # from rtgslam_ros.src.utils.multiprocessing_utils import clone_obj
 
 
@@ -564,6 +557,70 @@ class TrackingProcess(Tracker):
 # - ultimately robot speed of exploration is limited by blur_speed, tracker_speed and 
 # 4) Does incorrect poses lead to poor maps? Can the
 
+    def update_viewer(self):
+        gaussian_model = GaussianPointCloud(self.args)
+        gaussian_model._xyz = self.last_global_params["xyz"]
+        gaussian_model._opacity = self.last_global_params["opacity"]
+        gaussian_model._scaling = self.last_global_params["scales"]
+        gaussian_model._rotation = self.last_global_params["rotations"]
+        gaussian_model._shs = self.last_global_params["shs"]
+        gaussian_model._normal = self.last_global_params["normal"]
+        gaussian_model._confidence = self.last_global_params["confidence"]
+
+        gaussian_model.detach()
+
+        gaussian_packet = GaussianPacket(
+            gaussians=gaussian_model,
+            current_frame=self.frame,
+            gtcolor=self.frame.original_image,
+            gtdepth=self.frame.original_depth
+        )
+        self.publish_message_to_gui(gaussian_packet)
+
+
+    def publish_message_to_gui(self, gaussian_packet):
+        f2g_msg = self.convert_to_f2g_ros_msg(gaussian_packet)
+        f2g_msg.msg = f'Hello world {self.msg_counter}'
+        self.get_logger().info(f'Publishing to GUI Node: {self.msg_counter}')
+
+
+        self.f2g_publisher.publish(f2g_msg)
+        self.msg_counter += 1
+
+
+    def convert_to_f2g_ros_msg(self, gaussian_packet):
+        
+        f2g_msg = F2G()
+
+        f2g_msg.msg = "Sending 3D Gaussians"
+        f2g_msg.has_gaussians = gaussian_packet.has_gaussians
+        #f2g_msg.submap_id = gaussian_packet.submap_id
+
+        if gaussian_packet.has_gaussians:
+            f2g_msg.active_sh_degree = gaussian_packet.active_sh_degree 
+
+            f2g_msg.max_sh_degree = gaussian_packet.max_sh_degree
+            f2g_msg.xyz = convert_tensor_to_ros_message(gaussian_packet.get_xyz)
+            f2g_msg.features = convert_tensor_to_ros_message(gaussian_packet.get_features)
+            f2g_msg.scaling = convert_tensor_to_ros_message(gaussian_packet.get_scaling)
+            f2g_msg.rotation = convert_tensor_to_ros_message(gaussian_packet.get_rotation)
+            f2g_msg.opacity = convert_tensor_to_ros_message(gaussian_packet.get_opacity)
+
+            f2g_msg.n_obs = gaussian_packet.n_obs
+
+            if gaussian_packet.gtcolor is not None:
+                f2g_msg.gtcolor = convert_tensor_to_ros_message(gaussian_packet.gtcolor)
+            
+            if gaussian_packet.gtdepth is not None:
+                f2g_msg.gtdepth = convert_tensor_to_ros_message(gaussian_packet.gtdepth)
+        
+
+            #f2g_msg.current_frame = self.get_camera_msg_from_viewpoint(gaussian_packet.current_frame)
+
+            f2g_msg.finish = gaussian_packet.finish
+
+
+        return f2g_msg
 
 
     def acquire_frame_and_track(self, msg="default"):
@@ -577,16 +634,23 @@ class TrackingProcess(Tracker):
         move_to_gpu(self.frame)
 
         self.map_preprocess_mp(self.frame, self.frame_id)
+        start_time = time.time()
         self.tracking(self.frame, self.map_input)
+        tracker_time = time.time()
+        tracker_consume_time = tracker_time - start_time
+        print(f"Tracker time: {tracker_consume_time} secs")
+
         self.map_input["frame"] = copy.deepcopy(self.frame)
         self.map_input["frame"] = self.frame
         self.map_input["poses_new"] = self.get_new_poses() # Depends on ORBSLAM backend for tracker
 
         self.publish_to_backend(msg)
+        
         self.update_last_mapper_render(self.frame)
 
         # # Reimplement - Publisher T2G and corresponding messages
-        # self.update_viewer(self.frame)
+        if msg == "keyframe":
+            self.update_viewer()
 
         move_to_cpu(self.frame)
 
@@ -641,6 +705,7 @@ class TrackingProcess(Tracker):
 
 
         submap_gaussians = GaussianPointCloud(self.args)
+        submap_gaussians.detach()
         # submap_gaussians.training_setup(self.opt)
 
         submap_gaussians._xyz = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.xyz, self.device)
@@ -687,10 +752,6 @@ class TrackingProcess(Tracker):
             return self.scanner_finish
         else:
             return self.frame_id >= len(self.dataset_cameras)
-
-    def update_viewer(self, frame):
-        #Implement info to be passed to GUI here
-        pass
 
     def unpack_map_to_tracker(self):
         pass

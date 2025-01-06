@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/F2B.msg"
   "msg/B2F.msg"
   "msg/F2G.msg"
+  "msg/G2F.msg"
   "msg/Camera.msg"
   "msg/Gaussian.msg"
   DEPENDENCIES std_msgs
