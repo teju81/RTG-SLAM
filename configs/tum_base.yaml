@@ -1,4 +1,4 @@
-parent: "/root/code/rtgsla_ros_ws/src/configs/base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/configs/base.yaml"
 
 save_path: "/root/code/output/tum/debug"
 

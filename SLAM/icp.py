@@ -427,7 +427,9 @@ class IcpTracker:
                 
             pose_t1_t0 = devF(torch.from_numpy(np.eye(4)))
             levels = len(self.icp_downscales)
+            print(f"Running ICP on {levels} levels...")
             for level in range(levels):
+                print(f"Running ICP on level {level}...")
                 downscale = self.icp_downscales[level]
                 K_downscale = K * downscale
                 K_downscale[2,2] = 1.0

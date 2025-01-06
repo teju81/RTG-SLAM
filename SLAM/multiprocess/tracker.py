@@ -489,7 +489,7 @@ class TrackingProcess(Tracker):
 
             self.unpack_map_to_tracker()
             self.update_last_mapper_render(frame)
-            self.update_viewer(frame)
+            #self.update_viewer(frame)
 
             move_to_cpu(frame)
 
