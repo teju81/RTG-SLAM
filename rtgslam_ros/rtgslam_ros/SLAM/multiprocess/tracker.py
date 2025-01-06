@@ -510,11 +510,84 @@ class TrackingProcess(Tracker):
         self.msg_counter += 1
 
 
+    def initialize(self):
+        
+        # Gets called when the first frame is acquired
+        # Reset everything here
+
+        self.request_init()
+        self.reset = False
+
+    def request_init(self):
+        # Publish an init message to backend
+        self.publish_message_to_backend("init", cur_frame_idx, viewpoint, depth_map)
+        self.requested_init = True
+
+
+
+# Requirements:
+
+# 1) We want the environment to be mapped rapidly (as rapid as possible) at least the image acquisition should be rapid.
+# - Robot exploration speed will be limited by below factors
+# a) Speed of the tracker and mapper determine how fast robots explore the space (need to profile these algorithms for running time)
+# b) Blurred images are useless (??) - Blur speed of the cameras needs to be measured
+
+# 2) Ideally we want to automate this proess (Active SLAM) - for now we can assume it is done manually
+# (i) If manually done, you have to signal to the teleoperator to pause (when tracker and mapper need to catchup with each other, or tracking failure events)
+# (a) Live reconstruction may be useful to the teleoperator - spend more time in poorly reconstructed areas, problematic areas, things that require zoom-in, holes, etc.
+
+# (ii) For automated exploration
+# (a) How is the automated exploration planned?
+# - Sweep out the outer boundary of an unknown area and then explore its interiors in a raster form??
+# - Explore any blind zones that remained one at a time??
+# (b) Since, one cant rely on the map for movement and collision avoidance, one may need to use LIDARS or point clouds and safety distance buffers?
+
+# Options to setup coordination between tracker and mapper are:
+
+# A) Continue to track the frames without relying on the Gaussian Map at all (such as when Tracker is ORBSLAM)
+# - you can run the map optimization at your own pace in that case and focus on accuracy
+
+# Key questions that need to be answered if we were to use this approach
+
+# A1) Does incorrect poses lead to poor maps? (MonoGS paper i think talks of good convergence as long as you are in the vicinity)
+# A2) Can you get away by running the optimization for more number of iterations?
+# A3) What are the limitations of such an approach?
+
+# b) Continue to track the frames without relying on the Gaussian Map for sometime
+# - pause when tracked frame id and mapped frame id are not in sync (for this robot motion has to stop)
+
+# c) Tracker in sync with Gaussian mapper for every frame (robot motion for exploration will need to be very slow)
+
+# Some key questions: 
+# 1) Compare and contrast how fast are the various trackers out there (ORBSLAM, DGO, Gaussian Opt Tracker, ICP-GS).
+# 2) Does the accuracy of the tracking improve with Gaussian model based tracking?
+# 3) Effect of blurred images on the map?
+# - ultimately robot speed of exploration is limited by blur_speed, tracker_speed and 
+# 4) Does incorrect poses lead to poor maps? Can the
+
+
     def run(self):
         self.time = 0
         self.initialize_orb()
 
         while not self.finish_():
+
+            if self.pause:
+                continue
+
+            if self.requested_init:
+                # self.requested_init is made False in the listener after hearing from mapper
+                continue
+
+            if self.reset:
+                self.initialize()
+                continue
+
+
+            # Reach here if not paused, reset is done, requested_init is acknowledged by mapper
+
+            # At this point you have a gaussian map and the next frame
+
             frame = self.getNextFrame()
             if frame is None:
                 break
@@ -566,7 +639,6 @@ class TrackingProcess(Tracker):
                 #     pass
             wait_end = time.time()
 
-            
             # # Reimplement - Listener for M2T subscriber and corresponding Messages
             # self.unpack_map_to_tracker() # Delete this after listener is implemented
 
