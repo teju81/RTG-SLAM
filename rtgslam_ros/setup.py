@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'slam_frontend = rtgslam_ros.SLAM.multiprocess.tracker:main',
             'slam_backend = rtgslam_ros.SLAM.multiprocess.mapper:main',
+            'slam_gui = rtgslam_ros.gui.slam_gui:main',
         ],
     },
 )

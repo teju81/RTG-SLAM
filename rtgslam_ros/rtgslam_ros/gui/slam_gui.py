@@ -39,7 +39,7 @@ import torch.nn.functional as F
 from OpenGL import GL as gl
 
 # from monogs_ros.gaussian_splatting.gaussian_renderer import render
-# from monogs_ros.gaussian_splatting.utils.graphics_utils import fov2focal, getWorld2View2
+from rtgslam_ros.utils.graphics_utils import fov2focal, getWorld2View2
 from rtgslam_ros.gui.gl_render import util, util_gau
 from rtgslam_ros.gui.gl_render.render_ogl import OpenGLRenderer
 from rtgslam_ros.gui.gui_utils import (
@@ -50,8 +50,13 @@ from rtgslam_ros.gui.gui_utils import (
     cv_gl,
 )
 # from monogs_ros.utils.camera_utils import Camera
-# from monogs_ros.utils.logging_utils import Log
+from rtgslam_ros.scene.cameras import Camera
 
+# from monogs_ros.utils.logging_utils import Log
+import os
+from argparse import ArgumentParser
+from rtgslam_ros.utils.config_utils import read_config
+from rtgslam_ros.utils.general_utils import safe_state
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -894,8 +899,8 @@ def main():
 
     safe_state(args.quiet)
 
-    pipeline_params = munchify(config["pipeline_params"])
-    model_params = munchify(config["model_params"])
+    pipeline_params = args.pipeline_params
+    model_params = args.model_params
     bg_color = [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 

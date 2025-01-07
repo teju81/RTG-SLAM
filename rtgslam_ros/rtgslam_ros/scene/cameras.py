@@ -118,6 +118,22 @@ class Camera(nn.Module):
         self.world_view_transform.share_memory_()
         self.full_proj_transform.share_memory_()
 
+    # @staticmethod
+    # def init_from_gui(uid, T, FoVx, FoVy, fx, fy, cx, cy, H, W):
+    #     projection_matrix = getProjectionMatrix2(
+    #         znear=0.01, zfar=100.0, fx=fx, fy=fy, cx=cx, cy=cy, W=W, H=H
+    #     ).transpose(0, 1)
+    #     return Camera(
+    #         uid, None, None, T, projection_matrix, fx, fy, cx, cy, FoVx, FoVy, H, W
+    #     )
+
+    # @staticmethod
+    # def init_from_gui2(uid, T, FoVx, FoVy, cx, cy, H, W):
+    #     projection_matrix = getProjectionMatrix(znear=0.01, zfar=100.0, fovX=fovx, fovY=fovy).transpose(0, 1)
+    #     return Camera(
+    #         uid, None, None, T, projection_matrix, fx, fy, cx, cy, FoVx, FoVy, H, W
+    #     )
+
     def updatePose(self, pose_c2w):
         pose_w2c = np.linalg.inv(pose_c2w)
         self.update(pose_w2c[:3, :3].transpose(), pose_w2c[:3, 3])
