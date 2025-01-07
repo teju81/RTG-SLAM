@@ -1,5 +1,5 @@
 import queue
-
+import copy
 import cv2
 import numpy as np
 import open3d as o3d
@@ -12,6 +12,17 @@ from rtgslam_ros.utils.general_utils import (
 
 cv_gl = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
 
+def clone_obj(obj):
+    clone_obj = copy.deepcopy(obj)
+    for attr in clone_obj.__dict__.keys():
+        # check if its a property
+        if hasattr(clone_obj.__class__, attr) and isinstance(
+            getattr(clone_obj.__class__, attr), property
+        ):
+            continue
+        if isinstance(getattr(clone_obj, attr), torch.Tensor):
+            setattr(clone_obj, attr, getattr(clone_obj, attr).detach().clone())
+    return clone_obj
 
 class Frustum:
     def __init__(self, line_set, view_dir=None, view_dir_behind=None, size=None):
@@ -97,6 +108,7 @@ class GaussianPacket:
             self.get_rotation = gaussians.get_rotation
             self.max_sh_degree = gaussians.max_sh_degree
             self.get_features = gaussians.get_features
+            self.get_normal = gaussians.get_normal
 
             self._rotation = gaussians._rotation
             self.rotation_activation = torch.nn.functional.normalize
@@ -105,9 +117,12 @@ class GaussianPacket:
 
         self.keyframe = keyframe
         self.current_frame = current_frame
-        self.gtcolor = self.resize_img(gtcolor, 320)
-        self.gtdepth = self.resize_img(gtdepth, 320)
-        self.gtnormal = self.resize_img(gtnormal, 320)
+        if gtcolor is not None:
+            self.gtcolor = self.resize_img(gtcolor, 320)
+        if gtdepth is not None:
+            self.gtdepth = self.resize_img(gtdepth, 320)
+        if gtnormal is not None:
+            self.gtnormal = self.resize_img(gtnormal, 320)
         self.keyframes = keyframes
         self.finish = finish
         self.kf_window = kf_window

@@ -49,7 +49,7 @@ from rtgslam_ros.gui.gui_utils import (
     create_frustum,
     cv_gl,
 )
-# from monogs_ros.utils.camera_utils import Camera
+from rtgslam_ros.SLAM.render import Renderer
 from rtgslam_ros.scene.cameras import Camera
 
 # from monogs_ros.utils.logging_utils import Log
@@ -57,6 +57,9 @@ import os
 from argparse import ArgumentParser
 from rtgslam_ros.utils.config_utils import read_config
 from rtgslam_ros.utils.general_utils import safe_state
+from rtgslam_ros.arguments import DatasetParams
+from rtgslam_ros.scene import Dataset
+from rtgslam_ros.utils.camera_utils import loadCam
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -65,8 +68,11 @@ o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
 
 
 class SLAM_GUI(Node):
-    def __init__(self, params_gui=None):
+    def __init__(self, args, params_gui=None, dataset=None):
         super().__init__('gui_node')
+
+
+        self.args = args
 
         self.step = 0
         self.process_finished = False
@@ -84,6 +90,11 @@ class SLAM_GUI(Node):
         self.kf_window = None
         self.render_img = None
         self.received_f2g_msg = False
+
+        self.dataset = dataset
+        self.dataset_cameras = self.dataset.scene_info.train_cameras
+
+        self.gui_renderer = Renderer(self.args)
 
         if params_gui is not None:
             self.background = params_gui.background
@@ -118,9 +129,9 @@ class SLAM_GUI(Node):
         self.msg_counter_g2f = 0
 
 
-        self.g2f_publisher = self.create_publisher(G2F, '/Gui2Front', self.queue_size_)
+        self.g2f_publisher = self.create_publisher(G2F, '/GUI2Front', self.queue_size_)
 
-        self.f2g_subscriber = self.create_subscription(F2G, '/Front2Gui', self.f2g_listener_callback, self.queue_size_)
+        self.f2g_subscriber = self.create_subscription(F2G, '/Front2GUI', self.f2g_listener_callback, self.queue_size_)
         self.f2g_subscriber  # prevent unused variable warning
 
 
@@ -510,28 +521,25 @@ class SLAM_GUI(Node):
         image_gui = torch.zeros(
             (1, int(self.window.size.height), int(self.widget3d_width))
         )
-        vfov_deg = self.widget3d.scene.camera.get_field_of_view()
-        hfov_deg = self.vfov_to_hfov(vfov_deg, image_gui.shape[1], image_gui.shape[2])
-        FoVx = np.deg2rad(hfov_deg)
-        FoVy = np.deg2rad(vfov_deg)
-        fx = fov2focal(FoVx, image_gui.shape[2])
-        fy = fov2focal(FoVy, image_gui.shape[1])
-        cx = image_gui.shape[2] // 2
-        cy = image_gui.shape[1] // 2
-        T = torch.from_numpy(w2c)
-        current_cam = Camera.init_from_gui(
-            uid=-1,
-            T=T,
-            FoVx=FoVx,
-            FoVy=FoVy,
-            fx=fx,
-            fy=fy,
-            cx=cx,
-            cy=cy,
-            H=image_gui.shape[1],
-            W=image_gui.shape[2],
-        )
-        current_cam.update_RT(T[0:3, 0:3], T[0:3, 3])
+        # vfov_deg = self.widget3d.scene.camera.get_field_of_view()
+        # hfov_deg = self.vfov_to_hfov(vfov_deg, image_gui.shape[1], image_gui.shape[2])
+        # FoVx = np.deg2rad(hfov_deg)
+        # FoVy = np.deg2rad(vfov_deg)
+        # fx = fov2focal(FoVx, image_gui.shape[2])
+        # fy = fov2focal(FoVy, image_gui.shape[1])
+        # cx = image_gui.shape[2] // 2
+        # cy = image_gui.shape[1] // 2
+        # T = torch.from_numpy(w2c)
+
+        
+        
+        frame_info = self.dataset_cameras[0]
+        orig_w, orig_h = frame_info.image.size
+        #resolution_scale = image_gui.shape[1] / orig_h
+        resolution_scale = 1
+        current_cam = loadCam(self.args, 0, frame_info, resolution_scale)
+
+        current_cam.update(w2c[0:3, 0:3], w2c[0:3, 3])
         return current_cam
 
     def rasterise(self, current_cam):
@@ -559,13 +567,29 @@ class SLAM_GUI(Node):
             )
             self.gaussian_cur.get_features = features
         else:
-            rendering_data = render(
-                current_cam,
-                self.gaussian_cur,
-                self.pipe,
-                self.background,
-                self.scaling_slider.double_value,
-            )
+
+            if self.gaussian_cur.has_gaussians:
+
+                global_prams = {
+                    "xyz": self.gaussian_cur.get_xyz,
+                    "opacity": self.gaussian_cur.get_opacity,
+                    "scales": self.gaussian_cur.get_scaling,
+                    "rotations": self.gaussian_cur.get_rotation,
+                    "shs": self.gaussian_cur.get_features,
+                    "normal": self.gaussian_cur.get_normal,
+                    "confidence": None,
+                }
+                torch.cuda.synchronize()
+                rendering_data = self.gui_renderer.render(
+                    current_cam,
+                    global_prams,
+                    None,
+                    True
+                )
+                torch.cuda.synchronize()
+            else:
+               rendering_data = None
+                
         return rendering_data
 
     def render_o3d_image(self, results, current_cam):
@@ -740,30 +764,30 @@ class SLAM_GUI(Node):
             gaussian_packet.active_sh_degree = f2g_msg.active_sh_degree
             gaussian_packet.max_sh_degree = f2g_msg.max_sh_degree
 
-            gaussian_packet.get_xyz = convert_ros_multi_array_message_to_tensor(f2g_msg.get_xyz, self.device)
-            gaussian_packet.get_features = convert_ros_multi_array_message_to_tensor(f2g_msg.get_features, self.device)
-            gaussian_packet.get_scaling = convert_ros_multi_array_message_to_tensor(f2g_msg.get_scaling, self.device)
-            gaussian_packet.get_rotation = convert_ros_multi_array_message_to_tensor(f2g_msg.get_rotation, self.device)
-            gaussian_packet.get_opacity = convert_ros_multi_array_message_to_tensor(f2g_msg.get_opacity, self.device)
+            gaussian_packet.get_xyz = convert_ros_multi_array_message_to_tensor(f2g_msg.xyz, self.device)
+            gaussian_packet.get_features = convert_ros_multi_array_message_to_tensor(f2g_msg.features, self.device)
+            gaussian_packet.get_scaling = convert_ros_multi_array_message_to_tensor(f2g_msg.scaling, self.device)
+            gaussian_packet.get_rotation = convert_ros_multi_array_message_to_tensor(f2g_msg.rotation, self.device)
+            gaussian_packet.get_opacity = convert_ros_multi_array_message_to_tensor(f2g_msg.opacity, self.device)
+            gaussian_packet.get_normal = convert_ros_multi_array_message_to_tensor(f2g_msg.normal, self.device)
 
-
-            gaussian_packet.unique_kfIDs = convert_ros_array_message_to_tensor(f2g_msg.unique_kfids, self.device)
-            gaussian_packet.n_obs = convert_ros_array_message_to_tensor(f2g_msg.n_obs, self.device)
+            # gaussian_packet.unique_kfIDs = convert_ros_array_message_to_tensor(f2g_msg.unique_kfids, self.device)
+            gaussian_packet.n_obs = f2g_msg.n_obs
 
         if f2g_msg.gtcolor is not None:
             gaussian_packet.gtcolor = convert_ros_multi_array_message_to_tensor(f2g_msg.gtcolor, self.device)
         gaussian_packet.gtdepth = convert_ros_multi_array_message_to_numpy(f2g_msg.gtdepth)
 
 
-        gaussian_packet.current_frame = self.get_viewpoint_from_cam_msg(f2g_msg.current_frame)
+        # gaussian_packet.current_frame = self.get_viewpoint_from_cam_msg(f2g_msg.current_frame)
 
-        gaussian_packet.keyframes =[]
-        for keyframe in f2g_msg.keyframes:
-            gaussian_packet.keyframes.append(self.get_viewpoint_from_cam_msg(keyframe))
+        # gaussian_packet.keyframes =[]
+        # for keyframe in f2g_msg.keyframes:
+        #     gaussian_packet.keyframes.append(self.get_viewpoint_from_cam_msg(keyframe))
 
         gaussian_packet.finish = f2g_msg.finish
 
-        gaussian_packet.kf_window = {f2g_msg.kf_window.idx: f2g_msg.kf_window.current_window}
+        # gaussian_packet.kf_window = {f2g_msg.kf_window.idx: f2g_msg.kf_window.current_window}
 
         return gaussian_packet
 
@@ -825,7 +849,7 @@ class SLAM_GUI(Node):
         if gaussian_packet.gtdepth is not None:
             depth = gaussian_packet.gtdepth
             depth = imgviz.depth2rgb(
-                depth, min_value=0.1, max_value=5.0, colormap="jet"
+                depth.squeeze(), min_value=0.1, max_value=5.0, colormap="jet"
             )
             depth = torch.from_numpy(depth)
             depth = torch.permute(depth, (2, 0, 1)).float()
@@ -904,7 +928,7 @@ def main():
     bg_color = [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    gaussians = GaussianPointCloud(args)
+    gaussians = GaussianPacket()
 
     params_gui = ParamsGUI(
                     pipe=pipeline_params,
@@ -913,9 +937,19 @@ def main():
                     frontend_id = 0
                 )
 
+    dataset_params = DatasetParams(parser, sentinel=True)
+    dataset_params = dataset_params.extract(args)
+
+
+    # Initialize dataset
+    dataset = Dataset(
+        dataset_params,
+        shuffle=False,
+        resolution_scales=dataset_params.resolution_scales,
+    )
 
     rclpy.init()
-    gui_node = SLAM_GUI(params_gui)
+    gui_node = SLAM_GUI(args, params_gui, dataset)
     app.run()
     gui_node.destroy_node()
 

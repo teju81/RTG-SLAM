@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from std_msgs.msg import Float32MultiArray, Int32MultiArray, MultiArrayDimension
+import copy
 
 def convert_ros_multi_array_message_to_numpy(ros_multiarray_msg):
 
@@ -105,7 +106,11 @@ def convert_tensor_to_ros_message(tensor_msg):
     ros_multiarray_msg.layout.data_offset = 0
 
     # Flatten the data and assign it to the message
-    ros_multiarray_msg.data = tensor_msg.flatten().tolist()
+    temp_tensor = tensor_msg.clone() # Avoids sync issues and code runs faster .detach().cpu().half()
+
+    # Other options reduce precision .half() and restore on the other side, batch multiple tensors into a single tensor and undo it on the other side - To Be Done!! 
+
+    ros_multiarray_msg.data = temp_tensor.flatten().tolist()
 
     return ros_multiarray_msg
 
@@ -158,6 +163,11 @@ def convert_numpy_array_to_ros_message(np_arr):
     ros_multiarray_msg.layout.data_offset = 0
 
     # Flatten the data and assign it to the message
-    ros_multiarray_msg.data = np_arr.flatten().tolist()
+    np_arr_copy = copy.deepcopy(np_arr)
+
+    # Other options reduce precision .half() and restore on the other side, batch multiple tensors into a single tensor and undo it on the other side - To Be Done!! 
+
+
+    ros_multiarray_msg.data = np_arr_copy.flatten().tolist()
 
     return ros_multiarray_msg

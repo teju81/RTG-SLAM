@@ -8,6 +8,7 @@ std_msgs/Float32MultiArray features
 std_msgs/Float32MultiArray scaling
 std_msgs/Float32MultiArray rotation
 std_msgs/Float32MultiArray opacity
+std_msgs/Float32MultiArray normal
 int32 n_obs
 std_msgs/Float32MultiArray gtcolor
 std_msgs/Float32MultiArray gtdepth

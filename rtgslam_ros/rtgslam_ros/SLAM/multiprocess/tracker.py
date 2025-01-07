@@ -25,8 +25,7 @@ from rtgslam_ros.utils.ros_utils import (
     convert_numpy_array_to_ros_message, 
     convert_ros_multi_array_message_to_numpy, 
 )
-from rtgslam_ros.gui.gui_utils import GaussianPacket
-# from rtgslam_ros.src.utils.multiprocessing_utils import clone_obj
+from rtgslam_ros.gui.gui_utils import GaussianPacket, clone_obj
 
 
 import os
@@ -563,14 +562,18 @@ class TrackingProcess(Tracker):
         gaussian_model._opacity = self.last_global_params["opacity"]
         gaussian_model._scaling = self.last_global_params["scales"]
         gaussian_model._rotation = self.last_global_params["rotations"]
-        gaussian_model._shs = self.last_global_params["shs"]
+        
+        shs = self.last_global_params["shs"]
+        gaussian_model._features_dc = shs[:, 0:1, :]
+        gaussian_model._features_rest = shs[:, 1:, :]
+
         gaussian_model._normal = self.last_global_params["normal"]
         gaussian_model._confidence = self.last_global_params["confidence"]
 
         gaussian_model.detach()
 
         gaussian_packet = GaussianPacket(
-            gaussians=gaussian_model,
+            gaussians=clone_obj(gaussian_model),
             current_frame=self.frame,
             gtcolor=self.frame.original_image,
             gtdepth=self.frame.original_depth
@@ -605,6 +608,7 @@ class TrackingProcess(Tracker):
             f2g_msg.scaling = convert_tensor_to_ros_message(gaussian_packet.get_scaling)
             f2g_msg.rotation = convert_tensor_to_ros_message(gaussian_packet.get_rotation)
             f2g_msg.opacity = convert_tensor_to_ros_message(gaussian_packet.get_opacity)
+            f2g_msg.normal = convert_tensor_to_ros_message(gaussian_packet.get_normal)
 
             f2g_msg.n_obs = gaussian_packet.n_obs
 
@@ -659,6 +663,7 @@ class TrackingProcess(Tracker):
     def run(self):
         self.time = 0
         self.initialize_orb()
+        time.sleep(3) # Wait for the mapper to come up before bringing up tracker node
 
         while not self.finish_():
 
@@ -713,7 +718,7 @@ class TrackingProcess(Tracker):
         submap_gaussians._scaling = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.scales, self.device)
         submap_gaussians._rotation = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.rotations, self.device)
 
-        submap_gaussians._shs = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.shs, self.device) # How to convert shs to features (both dc and rest??)
+        shs = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.shs, self.device) # How to convert shs to features (both dc and rest??)
         #submap_gaussians._features_dc = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.features_dc, self.device)
         #submap_gaussians._features_rest = convert_ros_multi_array_message_to_tensor(b2f_msg.last_global_params.features_rest, self.device)
         
@@ -727,7 +732,7 @@ class TrackingProcess(Tracker):
             "opacity": submap_gaussians._opacity,
             "scales": submap_gaussians._scaling,
             "rotations": submap_gaussians._rotation,
-            "shs": submap_gaussians._shs,
+            "shs": shs,
             "normal": submap_gaussians._normal,
             "confidence": submap_gaussians._confidence,
         }
