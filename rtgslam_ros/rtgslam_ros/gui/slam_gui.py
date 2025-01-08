@@ -38,7 +38,6 @@ import torch
 import torch.nn.functional as F
 from OpenGL import GL as gl
 
-# from monogs_ros.gaussian_splatting.gaussian_renderer import render
 from rtgslam_ros.utils.graphics_utils import fov2focal, getWorld2View2
 from rtgslam_ros.gui.gl_render import util, util_gau
 from rtgslam_ros.gui.gl_render.render_ogl import OpenGLRenderer
@@ -49,6 +48,8 @@ from rtgslam_ros.gui.gui_utils import (
     create_frustum,
     cv_gl,
 )
+
+from rtgslam_ros.gui_renderer import render
 from rtgslam_ros.SLAM.render import Renderer
 from rtgslam_ros.scene.cameras import Camera
 
@@ -579,14 +580,9 @@ class SLAM_GUI(Node):
                     "normal": self.gaussian_cur.get_normal,
                     "confidence": None,
                 }
-                torch.cuda.synchronize()
                 rendering_data = self.gui_renderer.render(
                     current_cam,
-                    global_prams,
-                    None,
-                    True
-                )
-                torch.cuda.synchronize()
+                    global_prams)
             else:
                rendering_data = None
                 

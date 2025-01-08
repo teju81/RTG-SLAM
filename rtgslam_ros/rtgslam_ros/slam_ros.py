@@ -2,12 +2,14 @@ import os
 from argparse import ArgumentParser
 
 from rtgslam_ros.utils.config_utils import read_config
+
 parser = ArgumentParser(description="Training script parameters")
 parser.add_argument("--config", type=str, default="/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml")
 args = parser.parse_args()
 config_path = args.config
 args = read_config(config_path)
 os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in args.device_list)
+
 import torch
 import json
 from rtgslam_ros.utils.camera_utils import loadCam
@@ -26,12 +28,96 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import threading
 
+from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
+from rtgslam_ros.utils.ros_utils import (
+    convert_ros_array_message_to_tensor, 
+    convert_ros_multi_array_message_to_tensor, 
+    convert_tensor_to_ros_message, 
+    convert_numpy_array_to_ros_message, 
+    convert_ros_multi_array_message_to_numpy, 
+)
+from rtgslam_ros.gui.gui_utils import GaussianPacket, clone_obj
+from rtgslam_ros.SLAM.gaussian_pointcloud import *
+
+
 torch.set_printoptions(4, sci_mode=False)
 
 
 class SLAM_ROS(Node):
-    def __init__(self):
+    def __init__(self, args):
         super().__init__('slam_ros_node')
+        self.args = args
+
+        self.queue_size = 100
+        self.msg_counter = 0
+        self.f2g_publisher = self.create_publisher(F2G,'/Front2GUI',self.queue_size)
+
+
+    def get_gaussian_packet(self, current_frame, last_global_params):
+        gaussian_model = GaussianPointCloud(self.args)
+        gaussian_model._xyz = last_global_params["xyz"].clone().detach()
+        gaussian_model._opacity = last_global_params["opacity"].clone().detach()
+        gaussian_model._scaling = last_global_params["scales"].clone().detach()
+        gaussian_model._rotation = last_global_params["rotations"].clone().detach()
+        
+        shs = last_global_params["shs"].clone().detach()
+        gaussian_model._features_dc = shs[:, 0:1, :]
+        gaussian_model._features_rest = shs[:, 1:, :]
+
+        gaussian_model._normal = last_global_params["normal"].clone().detach()
+        gaussian_model._confidence = last_global_params["confidence"].clone().detach()
+
+        gaussian_packet = GaussianPacket(
+            gaussians=clone_obj(gaussian_model),
+            current_frame=current_frame,
+            gtcolor=current_frame.original_image,
+            gtdepth=current_frame.original_depth
+        )
+        
+        return gaussian_packet
+
+    def publish_message_to_gui(self, gaussian_packet):
+        f2g_msg = self.convert_to_f2g_ros_msg(gaussian_packet)
+        f2g_msg.msg = f'Hello world {self.msg_counter}'
+        self.get_logger().info(f'Publishing to GUI Node: {self.msg_counter}')
+
+        self.f2g_publisher.publish(f2g_msg)
+        self.msg_counter += 1
+
+
+    def convert_to_f2g_ros_msg(self, gaussian_packet):
+        
+        f2g_msg = F2G()
+
+        f2g_msg.msg = "Sending 3D Gaussians"
+        f2g_msg.has_gaussians = gaussian_packet.has_gaussians
+        #f2g_msg.submap_id = gaussian_packet.submap_id
+
+        if gaussian_packet.has_gaussians:
+            f2g_msg.active_sh_degree = gaussian_packet.active_sh_degree 
+
+            f2g_msg.max_sh_degree = gaussian_packet.max_sh_degree
+            f2g_msg.xyz = convert_tensor_to_ros_message(gaussian_packet.get_xyz)
+            f2g_msg.features = convert_tensor_to_ros_message(gaussian_packet.get_features)
+            f2g_msg.scaling = convert_tensor_to_ros_message(gaussian_packet.get_scaling)
+            f2g_msg.rotation = convert_tensor_to_ros_message(gaussian_packet.get_rotation)
+            f2g_msg.opacity = convert_tensor_to_ros_message(gaussian_packet.get_opacity)
+            f2g_msg.normal = convert_tensor_to_ros_message(gaussian_packet.get_normal)
+
+            f2g_msg.n_obs = gaussian_packet.n_obs
+
+            if gaussian_packet.gtcolor is not None:
+                f2g_msg.gtcolor = convert_tensor_to_ros_message(gaussian_packet.gtcolor)
+            
+            if gaussian_packet.gtdepth is not None:
+                f2g_msg.gtdepth = convert_tensor_to_ros_message(gaussian_packet.gtdepth)
+        
+
+            #f2g_msg.current_frame = self.get_camera_msg_from_viewpoint(gaussian_packet.current_frame)
+
+            f2g_msg.finish = gaussian_packet.finish
+
+        return f2g_msg
 
     def run(self):
         # set visible devices
@@ -119,6 +205,10 @@ class SLAM_ROS(Node):
             #         run_pcd=False
             #     )
             #     gaussian_map.save_model(save_data=True)
+            gaussian_packet = self.get_gaussian_packet(curr_frame, gaussian_map.global_params_detach)
+            self.publish_message_to_gui(gaussian_packet)
+
+
 
             gaussian_map.time += 1
             move_to_cpu(curr_frame)
@@ -166,7 +256,7 @@ def spin_thread(node):
 
 def main():
     rclpy.init()
-    slam_node = SLAM_ROS()
+    slam_node = SLAM_ROS(args)
     try:
         # Start the spin thread for continuously handling callbacks
         spin_thread_instance = threading.Thread(target=spin_thread, args=(slam_node,))

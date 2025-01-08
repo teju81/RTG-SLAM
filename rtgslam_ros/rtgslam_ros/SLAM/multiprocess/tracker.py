@@ -12,22 +12,6 @@ from rtgslam_ros.SLAM.icp import IcpTracker
 from threading import Thread
 from rtgslam_ros.utils.camera_utils import loadCam
 
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
-import threading
-
-from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
-from rtgslam_ros.utils.ros_utils import (
-    convert_ros_array_message_to_tensor, 
-    convert_ros_multi_array_message_to_tensor, 
-    convert_tensor_to_ros_message, 
-    convert_numpy_array_to_ros_message, 
-    convert_ros_multi_array_message_to_numpy, 
-)
-from rtgslam_ros.gui.gui_utils import GaussianPacket, clone_obj
-
-
 import os
 from argparse import ArgumentParser
 from rtgslam_ros.utils.config_utils import read_config
@@ -401,7 +385,6 @@ class Tracker(object):
         ate = eval_ate(pose_gt, pose_es)
         return ate
 
-
 class TrackingProcess(Tracker):
     def __init__(self, slam, args):
         args.icp_use_model_depth = False
@@ -440,74 +423,6 @@ class TrackingProcess(Tracker):
         self.track_renderer = Renderer(args)
         self.save_path = args.save_path
 
-    def update_viewer(self):
-        gaussian_model = GaussianPointCloud(self.args)
-        gaussian_model._xyz = self.last_global_params["xyz"]
-        gaussian_model._opacity = self.last_global_params["opacity"]
-        gaussian_model._scaling = self.last_global_params["scales"]
-        gaussian_model._rotation = self.last_global_params["rotations"]
-        
-        shs = self.last_global_params["shs"]
-        gaussian_model._features_dc = shs[:, 0:1, :]
-        gaussian_model._features_rest = shs[:, 1:, :]
-
-        gaussian_model._normal = self.last_global_params["normal"]
-        gaussian_model._confidence = self.last_global_params["confidence"]
-
-        gaussian_model.detach()
-
-        gaussian_packet = GaussianPacket(
-            gaussians=clone_obj(gaussian_model),
-            current_frame=self.frame,
-            gtcolor=self.frame.original_image,
-            gtdepth=self.frame.original_depth
-        )
-        self.publish_message_to_gui(gaussian_packet)
-
-    def publish_message_to_gui(self, gaussian_packet):
-        f2g_msg = self.convert_to_f2g_ros_msg(gaussian_packet)
-        f2g_msg.msg = f'Hello world {self.msg_counter}'
-        self.get_logger().info(f'Publishing to GUI Node: {self.msg_counter}')
-
-
-        self.f2g_publisher.publish(f2g_msg)
-        self.msg_counter += 1
-
-
-    def convert_to_f2g_ros_msg(self, gaussian_packet):
-        
-        f2g_msg = F2G()
-
-        f2g_msg.msg = "Sending 3D Gaussians"
-        f2g_msg.has_gaussians = gaussian_packet.has_gaussians
-        #f2g_msg.submap_id = gaussian_packet.submap_id
-
-        if gaussian_packet.has_gaussians:
-            f2g_msg.active_sh_degree = gaussian_packet.active_sh_degree 
-
-            f2g_msg.max_sh_degree = gaussian_packet.max_sh_degree
-            f2g_msg.xyz = convert_tensor_to_ros_message(gaussian_packet.get_xyz)
-            f2g_msg.features = convert_tensor_to_ros_message(gaussian_packet.get_features)
-            f2g_msg.scaling = convert_tensor_to_ros_message(gaussian_packet.get_scaling)
-            f2g_msg.rotation = convert_tensor_to_ros_message(gaussian_packet.get_rotation)
-            f2g_msg.opacity = convert_tensor_to_ros_message(gaussian_packet.get_opacity)
-            f2g_msg.normal = convert_tensor_to_ros_message(gaussian_packet.get_normal)
-
-            f2g_msg.n_obs = gaussian_packet.n_obs
-
-            if gaussian_packet.gtcolor is not None:
-                f2g_msg.gtcolor = convert_tensor_to_ros_message(gaussian_packet.gtcolor)
-            
-            if gaussian_packet.gtdepth is not None:
-                f2g_msg.gtdepth = convert_tensor_to_ros_message(gaussian_packet.gtdepth)
-        
-
-            #f2g_msg.current_frame = self.get_camera_msg_from_viewpoint(gaussian_packet.current_frame)
-
-            f2g_msg.finish = gaussian_packet.finish
-
-
-        return f2g_msg
 
     def map_preprocess_mp(self, frame, frame_id):
         self.map_input = super().map_preprocess(frame, frame_id)
