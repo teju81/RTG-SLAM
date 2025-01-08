@@ -7,39 +7,16 @@ import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from collections import deque
-from rtgslam_ros.scene.cameras import Camera
-from rtgslam_ros.SLAM.gaussian_pointcloud import *
-from rtgslam_ros.SLAM.render import Renderer
-from rtgslam_ros.SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
-from rtgslam_ros.utils.loss_utils import l1_loss, l2_loss, ssim
+from scene.cameras import Camera
+from SLAM.gaussian_pointcloud import *
+from SLAM.render import Renderer
+from SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
+from utils.loss_utils import l1_loss, l2_loss, ssim
 from cuda_utils._C import accumulate_gaussian_error
-from rtgslam_ros.utils.monitor import Recorder
+from utils.monitor import Recorder
 
-
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
-import threading
-
-from rtgslam_ros.utils.camera_utils import loadCam
-from rtgslam_interfaces.msg import F2B, B2F, F2G, Camera, Gaussian
-from rtgslam_ros.utils.ros_utils import (
-    convert_ros_array_message_to_tensor, 
-    convert_ros_multi_array_message_to_tensor, 
-    convert_tensor_to_ros_message, 
-    convert_numpy_array_to_ros_message, 
-    convert_ros_multi_array_message_to_numpy, 
-)
-
-from argparse import ArgumentParser
-from rtgslam_ros.utils.config_utils import read_config
-from rtgslam_ros.arguments import DatasetParams, MapParams, OptimizationParams
-from rtgslam_ros.scene import Dataset
-from rtgslam_ros.utils.general_utils import safe_state
-
-class Mapping(Node):
+class Mapping(object):
     def __init__(self, args, recorder=None) -> None:
-        super().__init__('tracker_backend_node')
         self.temp_pointcloud = GaussianPointCloud(args)
         self.pointcloud = GaussianPointCloud(args)
         self.stable_pointcloud = GaussianPointCloud(args)
@@ -1161,12 +1138,26 @@ class Mapping(Node):
 
 
 class MappingProcess(Mapping):
-    def __init__(self, map_params, optimization_params, dataset, args):
-        super().__init__(args)
-        self.recorder = Recorder(args.device_list[0])
+    def __init__(self, map_params, optimization_params, slam):
+        super().__init__(map_params)
+        self.recorder = Recorder(map_params.device_list[0])
         print("finish init")
 
-        self.args = args
+        self.slam = slam
+        # tracker 2 mapper
+        self._tracker2mapper_call = slam._tracker2mapper_call
+        self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
+
+        # mapper 2 system
+        self._mapper2system_call = slam._mapper2system_call
+        self._mapper2system_map_queue = slam._mapper2system_map_queue
+        self._mapper2system_tb_queue = slam._mapper2system_tb_queue
+        self._mapper2system_requires = slam._mapper2system_requires
+
+        # mapper 2 tracker
+        self._mapper2tracker_call = slam._mapper2tracker_call
+        self._mapper2tracker_map_queue = slam._mapper2tracker_map_queue
+
         self._requests = [False, False]  # [frame process, global optimization]
         self._stop = False
         self.input = {}
@@ -1174,21 +1165,10 @@ class MappingProcess(Mapping):
         self.processed_tick = []
         self.time = 0
         self.optimization_params = optimization_params
+        self._end = slam._end
         self.max_frame_id = -1
 
-        self.dataset = dataset
-        self.dataset_cameras = self.dataset.scene_info.train_cameras
-
-        self.finish = False
-        self.device="cuda"
-        self.map_info = {}
-
-        self.queue_size = 100
-        self.msg_counter = 0
-        self.b2f_publisher = self.create_publisher(B2F,'/Back2Front',self.queue_size)
-
-        self.f2b_subscriber = self.create_subscription(F2B, '/Front2Back', self.f2b_listener_callback, self.queue_size)
-        self.f2b_subscriber  # prevent unused variable warning
+        self.finish = mp.Condition()
 
     def set_input(self):
         self.frame_map["depth_map"] = self.input["depth_map"]
@@ -1227,166 +1207,54 @@ class MappingProcess(Mapping):
             else:
                 del x
 
-    def convert_from_f2b_ros_msg(self, f2b_msg):
-
-        self.input["color_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.color_map, self.device)
-        self.input["depth_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.depth_map, self.device)
-        self.input["normal_map_c"] = convert_ros_multi_array_message_to_tensor(f2b_msg.normal_map_c, self.device)
-        self.input["normal_map_w"] = convert_ros_multi_array_message_to_tensor(f2b_msg.normal_map_w, self.device)
-        self.input["vertex_map_c"] = convert_ros_multi_array_message_to_tensor(f2b_msg.vertex_map_c, self.device)
-        self.input["vertex_map_w"] = convert_ros_multi_array_message_to_tensor(f2b_msg.vertex_map_w, self.device)
-        # self.input["confidence_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.confidence_map, self.device)
-        # self.input["invalid_confidence_map"] = convert_ros_multi_array_message_to_tensor(f2b_msg.invalid_confidence_map, self.device)
-
-
-        self.input["time"] = f2b_msg.time
-
-        frame_id = self.input["time"]
-        frame_info = self.dataset_cameras[frame_id]
-        self.input["frame"] = loadCam(self.args, frame_id, frame_info, 1)
-
-        self.finish = f2b_msg.finish
-
-        #submap_gaussians.normal = convert_ros_array_message_to_tensor(f2b_msg.normal, self.device)
-
-        return
-
-
-    def f2b_listener_callback(self, f2b_msg):
-        self.get_logger().info(f'Rx from Frontend Node {f2b_msg.msg}')
-        self.convert_from_f2b_ros_msg(f2b_msg)
-        self.max_frame_id = max(self.max_frame_id, self.input["time"])
-        if f2b_msg.msg == "init":
-            msg = "init"
-        elif f2b_msg.msg == "keyframe":
-            msg = "local"
-        elif f2b_msg.msg == "finish":
-            msg = "global"
-            # Perform GLobal Optimization after SLAM is finished
-            self.global_optimization(self.optimization_params)
-            #self.time = -1
-            #self.send_output()
-            print("processed frames: ", self.optimize_frames_ids)
-            print("keyframes: ", self.keyframe_ids)
-
-            print("map finish")
-
-        if not self.finish:
-            print("map run...")
-            # run frame map update
-            self.set_input()
-            self.processed_tick.append(self.time)
-            self.mapping(self.frame, self.frame_map, self.input["time"], self.optimization_params)
-        else:
-            print("Exit signalled from frontend!!! Exiting...")
-
-        # Send map to tracker - reimplement using ros2 topics TBD
-        self.publish_to_frontend(msg)
-
-
-    def convert_to_b2f_ros_msg(self):
-
-        b2f_msg = B2F()
-
-        b2f_msg.last_frame_id = self.map_info["frame_id"]
-
-        # Sending the frame
-        b2f_msg.last_frame.uid = self.map_info["frame"].uid
-        b2f_msg.last_frame.rot = convert_numpy_array_to_ros_message(self.map_info["frame"].R)
-        b2f_msg.last_frame.trans = self.map_info["frame"].T.tolist()
-        b2f_msg.last_frame.fovx = self.map_info["frame"].FoVx
-        b2f_msg.last_frame.fovy = self.map_info["frame"].FoVy
-        b2f_msg.last_frame.timestamp = self.map_info["frame"].timestamp
-        b2f_msg.last_frame.depth_scale = self.map_info["frame"].depth_scale
-        b2f_msg.last_frame.original_image = convert_tensor_to_ros_message(self.map_info["frame"].original_image)
-        b2f_msg.last_frame.image_width = self.map_info["frame"].image_width
-        b2f_msg.last_frame.image_height = self.map_info["frame"].image_height
-        b2f_msg.last_frame.original_depth = convert_tensor_to_ros_message(self.map_info["frame"].original_depth)
-        b2f_msg.last_frame.cx = self.map_info["frame"].cx
-        b2f_msg.last_frame.cy = self.map_info["frame"].cy
-
-        #Gaussian Map
-        b2f_msg.last_global_params.xyz = convert_tensor_to_ros_message(self.map_info["global_params"]["xyz"])
-        b2f_msg.last_global_params.opacity = convert_tensor_to_ros_message(self.map_info["global_params"]["opacity"])
-        b2f_msg.last_global_params.scales = convert_tensor_to_ros_message(self.map_info["global_params"]["scales"])
-        b2f_msg.last_global_params.rotations = convert_tensor_to_ros_message(self.map_info["global_params"]["rotations"])
-        b2f_msg.last_global_params.shs = convert_tensor_to_ros_message(self.map_info["global_params"]["shs"])
-        b2f_msg.last_global_params.radius = convert_tensor_to_ros_message(self.map_info["global_params"]["radius"])
-
-        b2f_msg.last_global_params.normal = convert_tensor_to_ros_message(self.map_info["global_params"]["normal"])
-        b2f_msg.last_global_params.confidence = convert_tensor_to_ros_message(self.map_info["global_params"]["confidence"])
-
-        return b2f_msg
-
-
-    def publish_to_frontend(self, msg="default"):
-
-        self.map_info = {
+    def pack_map_to_tracker(self):
+        map_info = {
             "frame": copy.deepcopy(self.frame),
             "global_params": self.global_params_detach,
             "frame_id": self.processed_tick[-1],
         }
         print("mapper send map {} to tracker".format(self.processed_tick[-1]))
-
-        # Implement sending info to mapper via ROS topics
-        b2f_msg = self.convert_to_b2f_ros_msg()
-        b2f_msg.msg = msg
-        self.get_logger().info(f'{b2f_msg.msg}: Publishing to Frontend Node: {self.msg_counter}')
-        self.b2f_publisher.publish(b2f_msg)
-        self.msg_counter += 1
+        with self._mapper2tracker_call:
+            self._mapper2tracker_map_queue.put(map_info)
+            self._mapper2tracker_call.notify()
 
     def run(self):
         while True:
-            time.sleep(0.01)
-            continue # Till exit is signalled by frontend
+            print("map run...")
+            with self._tracker2mapper_call:
+                if self._tracker2mapper_frame_queue.qsize() == 0:
+                    print("waiting tracker to wakeup")
+                    self._tracker2mapper_call.wait()
+                self.input = self._tracker2mapper_frame_queue.get()
+                self.max_frame_id = max(self.max_frame_id, self.input["time"])
 
-    # def stop(self):
-    #     with self.finish:
-    #         self.finish.notify()
+            # TODO: debug input is None
+            if "time" in self.input and self.input["time"] == -1:
+                del self.input
+                break
+            
+            # run frame map update
+            self.set_input()
+            self.processed_tick.append(self.time)
+            self.mapping(self.frame, self.frame_map, self.input["time"], self.optimization_params)
+            self.pack_map_to_tracker()
 
-def spin_thread(node):
-    # Spin the node continuously in a separate thread
-    while rclpy.ok():
-        rclpy.spin_once(node, timeout_sec=0.1)
 
-def main():
-    parser = ArgumentParser(description="Training script parameters")
-    args = parser.parse_args()
-    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml"
-    args = read_config(config_path)
-    # set visible devices
-    device_list = args.device_list
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in device_list)
+        # self.release_receive()
+        self.global_optimization(self.optimization_params)
+        self.time = -1
+        self.send_output()
+        print("processed frames: ", self.optimize_frames_ids)
+        print("keyframes: ", self.keyframe_ids)
+        self._end[1] = 1
+        with self._mapper2system_call:
+            self._mapper2system_call.notify()
 
-    safe_state(args.quiet)
-    
-    optimization_params = OptimizationParams(parser)
-    optimization_params = optimization_params.extract(args)
+        with self.finish:
+            print("mapper wating finish")
+            self.finish.wait()
+        print("map finish")
 
-    dataset_params = DatasetParams(parser, sentinel=True)
-    dataset_params = dataset_params.extract(args)
-    
-    map_params = MapParams(parser)
-    map_params = map_params.extract(args)
-
-    # Initialize dataset
-    dataset = Dataset(
-        dataset_params,
-        shuffle=False,
-        resolution_scales=dataset_params.resolution_scales,
-    )
-
-    rclpy.init()
-    mapper_node = MappingProcess(map_params, optimization_params, dataset, args)
-    try:
-        # Start the spin thread for continuously handling callbacks
-        spin_thread_instance = threading.Thread(target=spin_thread, args=(mapper_node,))
-        spin_thread_instance.start()
-
-        # Run the main logic (this will execute in parallel with message handling)
-        mapper_node.run()
-        
-    finally:
-        mapper_node.destroy_node()
-        rclpy.shutdown()
-        spin_thread_instance.join()  # Wait for the spin thread to finish
+    def stop(self):
+        with self.finish:
+            self.finish.notify()
