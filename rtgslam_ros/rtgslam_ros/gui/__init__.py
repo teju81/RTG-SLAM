@@ -12,7 +12,7 @@
 import math
 
 import torch
-from diff_gaussian_rasterization import (
+from diff_gaussian_rasterization_monogs import (
     GaussianRasterizationSettings,
     GaussianRasterizer,
 )
