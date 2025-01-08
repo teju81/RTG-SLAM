@@ -49,8 +49,7 @@ from rtgslam_ros.gui.gui_utils import (
     cv_gl,
 )
 
-from rtgslam_ros.gui_renderer import render
-from rtgslam_ros.SLAM.render import Renderer
+from rtgslam_ros.gui import render
 from rtgslam_ros.scene.cameras import Camera
 
 # from monogs_ros.utils.logging_utils import Log
@@ -94,8 +93,6 @@ class SLAM_GUI(Node):
 
         self.dataset = dataset
         self.dataset_cameras = self.dataset.scene_info.train_cameras
-
-        self.gui_renderer = Renderer(self.args)
 
         if params_gui is not None:
             self.background = params_gui.background
@@ -568,23 +565,34 @@ class SLAM_GUI(Node):
             )
             self.gaussian_cur.get_features = features
         else:
-
+            print()
             if self.gaussian_cur.has_gaussians:
-
-                global_prams = {
-                    "xyz": self.gaussian_cur.get_xyz,
-                    "opacity": self.gaussian_cur.get_opacity,
-                    "scales": self.gaussian_cur.get_scaling,
-                    "rotations": self.gaussian_cur.get_rotation,
-                    "shs": self.gaussian_cur.get_features,
-                    "normal": self.gaussian_cur.get_normal,
-                    "confidence": None,
-                }
-                rendering_data = self.gui_renderer.render(
+                rendering_data = render(
                     current_cam,
-                    global_prams)
+                    self.gaussian_cur,
+                    self.pipe,
+                    self.background,
+                    self.scaling_slider.double_value,
+                )
             else:
-               rendering_data = None
+                return None
+
+            # if self.gaussian_cur.has_gaussians:
+
+            #     global_prams = {
+            #         "xyz": self.gaussian_cur.get_xyz,
+            #         "opacity": self.gaussian_cur.get_opacity,
+            #         "scales": self.gaussian_cur.get_scaling,
+            #         "rotations": self.gaussian_cur.get_rotation,
+            #         "shs": self.gaussian_cur.get_features,
+            #         "normal": self.gaussian_cur.get_normal,
+            #         "confidence": None,
+            #     }
+            #     rendering_data = self.gui_renderer.render(
+            #         current_cam,
+            #         global_prams)
+            # else:
+            #    rendering_data = None
                 
         return rendering_data
 
@@ -671,6 +679,7 @@ class SLAM_GUI(Node):
             return
         current_cam = self.get_current_cam()
         results = self.rasterise(current_cam)
+        #results = None
         if results is None:
             return
         self.render_img = self.render_o3d_image(results, current_cam)
@@ -919,8 +928,8 @@ def main():
 
     safe_state(args.quiet)
 
-    pipeline_params = args.pipeline_params
-    model_params = args.model_params
+    pipeline_params = munchify(args.pipeline_params)
+    model_params = munchify(args.model_params)
     bg_color = [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
