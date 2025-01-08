@@ -1,33 +1,39 @@
 import os
 from argparse import ArgumentParser
 
-from utils.config_utils import read_config
+from rtgslam_ros.utils.config_utils import read_config
 parser = ArgumentParser(description="Training script parameters")
-parser.add_argument("--config", type=str, default="configs/replica/office0.yaml")
+parser.add_argument("--config", type=str, default="/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml")
 args = parser.parse_args()
 config_path = args.config
 args = read_config(config_path)
 os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(device) for device in args.device_list)
 import torch
 import json
-from utils.camera_utils import loadCam
-from arguments import DatasetParams, MapParams, OptimizationParams
-from scene import Dataset
-from SLAM.multiprocess.mapper import Mapping
-from SLAM.multiprocess.tracker import Tracker
-from SLAM.utils import *
-from SLAM.eval import eval_frame
-from utils.general_utils import safe_state
-from utils.monitor import Recorder
+from rtgslam_ros.utils.camera_utils import loadCam
+from rtgslam_ros.arguments import DatasetParams, MapParams, OptimizationParams
+from rtgslam_ros.scene import Dataset
+from rtgslam_ros.SLAM.multiprocess.mapper import Mapping
+from rtgslam_ros.SLAM.multiprocess.tracker import Tracker
+from rtgslam_ros.SLAM.utils import *
+# from rtgslam_ros.SLAM.eval import eval_frame
+from rtgslam_ros.utils.general_utils import safe_state
+from rtgslam_ros.utils.monitor import Recorder
+
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+import threading
 
 torch.set_printoptions(4, sci_mode=False)
 
 
 class SLAM_ROS(Node):
-    def __init__(self, args):
+    def __init__(self):
         super().__init__('slam_ros_node')
 
-    def run():
+    def run(self):
         # set visible devices
         time_recorder = Recorder(args.device_list[0])
         optimization_params = OptimizationParams(parser)
@@ -99,20 +105,20 @@ class SLAM_ROS(Node):
             print(f"[LOG] mapper cost time: {mapper_time - tracker_time}")
             if record_mem:
                 time_recorder.watch_gpu()
-            # report eval loss
-            if ((gaussian_map.time + 1) % gaussian_map.save_step == 0) or (
-                gaussian_map.time == 0
-            ):
-                eval_frame(
-                    gaussian_map,
-                    curr_frame,
-                    os.path.join(gaussian_map.save_path, "eval_render"),
-                    min_depth=gaussian_map.min_depth,
-                    max_depth=gaussian_map.max_depth,
-                    save_picture=True,
-                    run_pcd=False
-                )
-                gaussian_map.save_model(save_data=True)
+            # # report eval loss
+            # if ((gaussian_map.time + 1) % gaussian_map.save_step == 0) or (
+            #     gaussian_map.time == 0
+            # ):
+            #     eval_frame(
+            #         gaussian_map,
+            #         curr_frame,
+            #         os.path.join(gaussian_map.save_path, "eval_render"),
+            #         min_depth=gaussian_map.min_depth,
+            #         max_depth=gaussian_map.max_depth,
+            #         save_picture=True,
+            #         run_pcd=False
+            #     )
+            #     gaussian_map.save_model(save_data=True)
 
             gaussian_map.time += 1
             move_to_cpu(curr_frame)
@@ -131,15 +137,15 @@ class SLAM_ROS(Node):
         new_poses = gaussian_tracker.get_new_poses()
         gaussian_map.update_poses(new_poses)
         gaussian_map.global_optimization(optimization_params, is_end=True)
-        eval_frame(
-            gaussian_map,
-            gaussian_map.keyframe_list[-1],
-            os.path.join(gaussian_map.save_path, "eval_render"),
-            min_depth=gaussian_map.min_depth,
-            max_depth=gaussian_map.max_depth,
-            save_picture=True,
-            run_pcd=False
-        )
+        # eval_frame(
+        #     gaussian_map,
+        #     gaussian_map.keyframe_list[-1],
+        #     os.path.join(gaussian_map.save_path, "eval_render"),
+        #     min_depth=gaussian_map.min_depth,
+        #     max_depth=gaussian_map.max_depth,
+        #     save_picture=True,
+        #     run_pcd=False
+        # )
         
         gaussian_map.save_model(save_data=True)
         gaussian_tracker.save_traj(args.save_path)

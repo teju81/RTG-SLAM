@@ -1,16 +1,16 @@
 import copy
 import matplotlib.pyplot as plt
-from SLAM.gaussian_pointcloud import *
+from rtgslam_ros.SLAM.gaussian_pointcloud import *
 
 import torch.multiprocessing as mp
-from SLAM.render import Renderer
+from rtgslam_ros.SLAM.render import Renderer
 from collections import defaultdict
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 
-from SLAM.icp import IcpTracker
+from rtgslam_ros.SLAM.icp import IcpTracker
 from threading import Thread
-from utils.camera_utils import loadCam
+from rtgslam_ros.utils.camera_utils import loadCam
 
 import rclpy
 from rclpy.node import Node
@@ -612,7 +612,7 @@ class TrackingProcess(Tracker):
         self._mapper2tracker_call.release()
 
     def update_last_mapper_render(self, frame):
-        pose_t0_w = frame.get_c2w.cpu().numpy()Cur
+        pose_t0_w = frame.get_c2w.cpu().numpy()
         if self.last_frame is not None:
             pose_w_t0 = np.linalg.inv(pose_t0_w)
             self.last_frame.update(pose_w_t0[:3, :3].transpose(), pose_w_t0[:3, 3])

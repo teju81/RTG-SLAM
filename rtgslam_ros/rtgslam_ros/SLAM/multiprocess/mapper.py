@@ -7,13 +7,13 @@ import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from collections import deque
-from scene.cameras import Camera
-from SLAM.gaussian_pointcloud import *
-from SLAM.render import Renderer
-from SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
-from utils.loss_utils import l1_loss, l2_loss, ssim
+from rtgslam_ros.scene.cameras import Camera
+from rtgslam_ros.SLAM.gaussian_pointcloud import *
+from rtgslam_ros.SLAM.render import Renderer
+from rtgslam_ros.SLAM.utils import merge_ply, rot_compare, trans_compare, bbox_filter
+from rtgslam_ros.utils.loss_utils import l1_loss, l2_loss, ssim
 from cuda_utils._C import accumulate_gaussian_error
-from utils.monitor import Recorder
+from rtgslam_ros.utils.monitor import Recorder
 
 class Mapping(object):
     def __init__(self, args, recorder=None) -> None:
