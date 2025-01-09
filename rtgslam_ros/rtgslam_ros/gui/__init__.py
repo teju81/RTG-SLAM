@@ -12,7 +12,7 @@
 import math
 
 import torch
-from diff_gaussian_rasterization_monogs import (
+from diff_gaussian_rasterization_gui import (
     GaussianRasterizationSettings,
     GaussianRasterizer,
 )
@@ -64,7 +64,7 @@ def render(
         scale_modifier=scaling_modifier,
         viewmatrix=viewpoint_camera.world_view_transform,
         projmatrix=viewpoint_camera.full_proj_transform,
-        projmatrix_raw=viewpoint_camera.projection_matrix,
+        #projmatrix_raw=viewpoint_camera.projection_matrix,
         sh_degree=pc.active_sh_degree,
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
@@ -114,7 +114,7 @@ def render(
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen).
     if mask is not None:
-        rendered_image, radii, depth, opacity = rasterizer(
+        rendered_image, radii = rasterizer(
             means3D=means3D[mask],
             means2D=means2D[mask],
             shs=shs[mask],
@@ -123,11 +123,9 @@ def render(
             scales=scales[mask],
             rotations=rotations[mask],
             cov3D_precomp=cov3D_precomp[mask] if cov3D_precomp is not None else None,
-            theta=viewpoint_camera.cam_rot_delta,
-            rho=viewpoint_camera.cam_trans_delta,
         )
     else:
-        rendered_image, radii, depth, opacity, n_touched = rasterizer(
+        rendered_image, radii = rasterizer(
             means3D=means3D,
             means2D=means2D,
             shs=shs,
@@ -136,18 +134,11 @@ def render(
             scales=scales,
             rotations=rotations,
             cov3D_precomp=cov3D_precomp,
-            theta=viewpoint_camera.cam_rot_delta,
-            rho=viewpoint_camera.cam_trans_delta,
         )
 
     # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
     # They will be excluded from value updates used in the splitting criteria.
     return {
         "render": rendered_image,
-        "viewspace_points": screenspace_points,
-        "visibility_filter": radii > 0,
         "radii": radii,
-        "depth": depth,
-        "opacity": opacity,
-        "n_touched": n_touched,
     }
