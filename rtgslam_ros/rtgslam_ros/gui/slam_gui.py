@@ -513,6 +513,12 @@ class SLAM_GUI(Node):
             2 * np.arctan(width * np.tan(np.deg2rad(vfov_deg) / 2) / height)
         )
 
+    def convert_to_numpy_img(self, image_tensor):
+        numpy_image = image_tensor.permute(1, 2, 0).cpu().detach().numpy()  # Convert to (H, W, C) format
+        numpy_image = (numpy_image * 255).astype(np.uint8)
+
+        return numpy_image
+
     def get_current_cam(self):
         w2c = cv_gl @ self.widget3d.scene.camera.get_view_matrix()
 
@@ -565,7 +571,6 @@ class SLAM_GUI(Node):
             )
             self.gaussian_cur.get_features = features
         else:
-            print()
             if self.gaussian_cur.has_gaussians:
                 rendering_data = render(
                     current_cam,
@@ -574,6 +579,12 @@ class SLAM_GUI(Node):
                     self.background,
                     self.scaling_slider.double_value,
                 )
+                print(self.gaussian_cur.get_features)
+                print(self.gaussian_cur.get_xyz)
+                # cv2.imshow("original_image", self.convert_to_numpy_img(current_cam.original_image))
+                # cv2.imshow("render img", self.convert_to_numpy_img(rendering_data["render"]))
+                # cv2.waitKey(0)
+
             else:
                 return None
 

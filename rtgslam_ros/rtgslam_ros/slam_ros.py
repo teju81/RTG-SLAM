@@ -38,6 +38,7 @@ from rtgslam_ros.utils.ros_utils import (
 )
 from rtgslam_ros.gui.gui_utils import GaussianPacket, clone_obj
 from rtgslam_ros.SLAM.gaussian_pointcloud import *
+from rtgslam_ros.SLAM.gaussian_model import GaussianModel
 
 
 torch.set_printoptions(4, sci_mode=False)
