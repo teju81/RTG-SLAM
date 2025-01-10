@@ -50,6 +50,8 @@ def getK(fx, fy, cx, cy):
 
 
 def getWorld2View2(R, t, translate=np.array([0.0, 0.0, 0.0]), scale=1.0):
+    print(R)
+    print(t)
     Rt = np.zeros((4, 4))
     Rt[:3, :3] = R.transpose()
     Rt[:3, 3] = t

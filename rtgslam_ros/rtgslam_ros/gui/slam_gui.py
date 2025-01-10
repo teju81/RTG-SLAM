@@ -51,6 +51,7 @@ from rtgslam_ros.gui.gui_utils import (
 
 from rtgslam_ros.gui import render
 from rtgslam_ros.scene.cameras import Camera
+from rtgslam_ros.gui.gui_camera import GUICamera
 
 # from monogs_ros.utils.logging_utils import Log
 import os
@@ -520,31 +521,65 @@ class SLAM_GUI(Node):
         return numpy_image
 
     def get_current_cam(self):
+        # w2c = cv_gl @ self.widget3d.scene.camera.get_view_matrix()
+
+        # image_gui = torch.zeros(
+        #     (1, int(self.window.size.height), int(self.widget3d_width))
+        # )
+        # # vfov_deg = self.widget3d.scene.camera.get_field_of_view()
+        # # hfov_deg = self.vfov_to_hfov(vfov_deg, image_gui.shape[1], image_gui.shape[2])
+        # # FoVx = np.deg2rad(hfov_deg)
+        # # FoVy = np.deg2rad(vfov_deg)
+        # # fx = fov2focal(FoVx, image_gui.shape[2])
+        # # fy = fov2focal(FoVy, image_gui.shape[1])
+        # # cx = image_gui.shape[2] // 2
+        # # cy = image_gui.shape[1] // 2
+        # # T = torch.from_numpy(w2c)
+
+        
+        
+        # frame_info = self.dataset_cameras[0]
+        # orig_w, orig_h = frame_info.image.size
+        # #resolution_scale = image_gui.shape[1] / orig_h
+        # resolution_scale = 1
+        # current_cam = loadCam(self.args, 0, frame_info, resolution_scale)
+
+        # current_cam.update(w2c[0:3, 0:3], w2c[0:3, 3])
+        # return current_cam
+
         w2c = cv_gl @ self.widget3d.scene.camera.get_view_matrix()
 
         image_gui = torch.zeros(
             (1, int(self.window.size.height), int(self.widget3d_width))
         )
-        # vfov_deg = self.widget3d.scene.camera.get_field_of_view()
-        # hfov_deg = self.vfov_to_hfov(vfov_deg, image_gui.shape[1], image_gui.shape[2])
-        # FoVx = np.deg2rad(hfov_deg)
-        # FoVy = np.deg2rad(vfov_deg)
-        # fx = fov2focal(FoVx, image_gui.shape[2])
-        # fy = fov2focal(FoVy, image_gui.shape[1])
-        # cx = image_gui.shape[2] // 2
-        # cy = image_gui.shape[1] // 2
-        # T = torch.from_numpy(w2c)
-
-        
-        
-        frame_info = self.dataset_cameras[0]
-        orig_w, orig_h = frame_info.image.size
-        #resolution_scale = image_gui.shape[1] / orig_h
-        resolution_scale = 1
-        current_cam = loadCam(self.args, 0, frame_info, resolution_scale)
-
-        current_cam.update(w2c[0:3, 0:3], w2c[0:3, 3])
+        vfov_deg = self.widget3d.scene.camera.get_field_of_view()
+        hfov_deg = self.vfov_to_hfov(vfov_deg, image_gui.shape[1], image_gui.shape[2])
+        FoVx = np.deg2rad(hfov_deg)
+        FoVy = np.deg2rad(vfov_deg)
+        fx = fov2focal(FoVx, image_gui.shape[2])
+        fy = fov2focal(FoVy, image_gui.shape[1])
+        cx = image_gui.shape[2] // 2
+        cy = image_gui.shape[1] // 2
+        T = torch.from_numpy(w2c)
+        current_cam = GUICamera.init_from_gui(
+            uid=-1,
+            T=T,
+            FoVx=FoVx,
+            FoVy=FoVy,
+            fx=fx,
+            fy=fy,
+            cx=cx,
+            cy=cy,
+            H=image_gui.shape[1],
+            W=image_gui.shape[2],
+        )
+        current_cam.update_RT(T[0:3, 0:3], T[0:3, 3])
+        # cv2.imshow("original_image", self.convert_to_numpy_img(current_cam.original_image))
+        # #cv2.imshow("render img", self.convert_to_numpy_img(rendering_data["render"]))
+        # cv2.waitKey(0)
         return current_cam
+
+
 
     def rasterise(self, current_cam):
         if (
@@ -571,7 +606,7 @@ class SLAM_GUI(Node):
             )
             self.gaussian_cur.get_features = features
         else:
-            if self.gaussian_cur.has_gaussians:
+            if self.gaussian_cur.has_gaussians and not torch.isnan(current_cam.R).any():
                 rendering_data = render(
                     current_cam,
                     self.gaussian_cur,
@@ -581,9 +616,7 @@ class SLAM_GUI(Node):
                 )
                 print(self.gaussian_cur.get_features)
                 print(self.gaussian_cur.get_xyz)
-                # cv2.imshow("original_image", self.convert_to_numpy_img(current_cam.original_image))
-                # cv2.imshow("render img", self.convert_to_numpy_img(rendering_data["render"]))
-                # cv2.waitKey(0)
+
 
             else:
                 return None
