@@ -1,6 +1,6 @@
 import os
 from argparse import ArgumentParser
-
+import cv2
 from rtgslam_ros.utils.config_utils import read_config
 
 parser = ArgumentParser(description="Training script parameters")
@@ -36,7 +36,7 @@ from rtgslam_ros.utils.ros_utils import (
     convert_numpy_array_to_ros_message, 
     convert_ros_multi_array_message_to_numpy, 
 )
-from rtgslam_ros.gui.gui_utils import GaussianPacket, clone_obj
+from rtgslam_ros.gui.gui_utils import GUIPacket, clone_obj
 from rtgslam_ros.SLAM.gaussian_pointcloud import *
 from rtgslam_ros.SLAM.gaussian_model import GaussianModel
 
@@ -53,32 +53,9 @@ class SLAM_ROS(Node):
         self.msg_counter = 0
         self.f2g_publisher = self.create_publisher(F2G,'/Front2GUI',self.queue_size)
 
-
-    def get_gaussian_packet(self, current_frame, last_global_params):
-        gaussian_model = GaussianPointCloud(self.args)
-        gaussian_model._xyz = last_global_params["xyz"].clone().detach()
-        gaussian_model._opacity = last_global_params["opacity"].clone().detach()
-        gaussian_model._scaling = last_global_params["scales"].clone().detach()
-        gaussian_model._rotation = last_global_params["rotations"].clone().detach()
-        
-        shs = last_global_params["shs"].clone().detach()
-        gaussian_model._features_dc = shs[:, 0:1, :]
-        gaussian_model._features_rest = shs[:, 1:, :]
-
-        gaussian_model._normal = last_global_params["normal"].clone().detach()
-        gaussian_model._confidence = last_global_params["confidence"].clone().detach()
-
-        gaussian_packet = GaussianPacket(
-            gaussians=clone_obj(gaussian_model),
-            current_frame=current_frame,
-            gtcolor=current_frame.original_image,
-            gtdepth=current_frame.original_depth
-        )
-        
-        return gaussian_packet
-
-    def publish_message_to_gui(self, gaussian_packet):
-        f2g_msg = self.convert_to_f2g_ros_msg(gaussian_packet)
+    def publish_message_to_gui(self, current_frame, last_global_params):
+        gui_packet = GUIPacket(current_frame, last_global_params)
+        f2g_msg = self.convert_to_f2g_ros_msg(gui_packet)
         f2g_msg.msg = f'Hello world {self.msg_counter}'
         self.get_logger().info(f'Publishing to GUI Node: {self.msg_counter}')
 
@@ -86,37 +63,46 @@ class SLAM_ROS(Node):
         self.msg_counter += 1
 
 
-    def convert_to_f2g_ros_msg(self, gaussian_packet):
+    def convert_to_f2g_ros_msg(self, gui_packet):
         
         f2g_msg = F2G()
 
         f2g_msg.msg = "Sending 3D Gaussians"
-        f2g_msg.has_gaussians = gaussian_packet.has_gaussians
+        f2g_msg.has_gaussians = gui_packet.has_gaussians
+        f2g_msg.xyz = convert_tensor_to_ros_message(gui_packet.xyz)
+        f2g_msg.shs = convert_tensor_to_ros_message(gui_packet.shs)
+        f2g_msg.scaling = convert_tensor_to_ros_message(gui_packet.scaling)
+        f2g_msg.rotation = convert_tensor_to_ros_message(gui_packet.rotation)
+        f2g_msg.opacity = convert_tensor_to_ros_message(gui_packet.opacity)
+        f2g_msg.normal = convert_tensor_to_ros_message(gui_packet.normal)
+        f2g_msg.confidence = convert_tensor_to_ros_message(gui_packet.confidence)
+        f2g_msg.radius = convert_tensor_to_ros_message(gui_packet.radius)
+        f2g_msg.gtcolor = convert_tensor_to_ros_message(gui_packet.gtcolor)
+        f2g_msg.gtdepth = convert_tensor_to_ros_message(gui_packet.gtdepth)
+        f2g_msg.rot = convert_numpy_array_to_ros_message(gui_packet.rot)
+        f2g_msg.trans = gui_packet.trans.tolist()
+        f2g_msg.finish = gui_packet.finish
+
+        #f2g_msg.has_gaussians = gaussian_packet.has_gaussians
         #f2g_msg.submap_id = gaussian_packet.submap_id
 
-        if gaussian_packet.has_gaussians:
-            f2g_msg.active_sh_degree = gaussian_packet.active_sh_degree 
+        #if gaussian_packet.has_gaussians:
+            #f2g_msg.active_sh_degree = gaussian_packet.active_sh_degree 
 
-            f2g_msg.max_sh_degree = gaussian_packet.max_sh_degree
-            f2g_msg.xyz = convert_tensor_to_ros_message(gaussian_packet.get_xyz)
-            f2g_msg.features = convert_tensor_to_ros_message(gaussian_packet.get_features)
-            f2g_msg.scaling = convert_tensor_to_ros_message(gaussian_packet.get_scaling)
-            f2g_msg.rotation = convert_tensor_to_ros_message(gaussian_packet.get_rotation)
-            f2g_msg.opacity = convert_tensor_to_ros_message(gaussian_packet.get_opacity)
-            f2g_msg.normal = convert_tensor_to_ros_message(gaussian_packet.get_normal)
+            #f2g_msg.max_sh_degree = gaussian_packet.max_sh_degree
 
-            f2g_msg.n_obs = gaussian_packet.n_obs
+            #f2g_msg.n_obs = gaussian_packet.n_obs
 
-            if gaussian_packet.gtcolor is not None:
-                f2g_msg.gtcolor = convert_tensor_to_ros_message(gaussian_packet.gtcolor)
+        # if gaussian_packet.gtcolor is not None:
             
-            if gaussian_packet.gtdepth is not None:
-                f2g_msg.gtdepth = convert_tensor_to_ros_message(gaussian_packet.gtdepth)
+        
+        # if gaussian_packet.gtdepth is not None:
+            
         
 
             #f2g_msg.current_frame = self.get_camera_msg_from_viewpoint(gaussian_packet.current_frame)
 
-            f2g_msg.finish = gaussian_packet.finish
+            #f2g_msg.finish = gaussian_packet.finish
 
         return f2g_msg
 
@@ -177,6 +163,7 @@ class SLAM_ROS(Node):
             gaussian_map.mapping(curr_frame, frame_map, frame_id, optimization_params)
 
             gaussian_map.get_render_output(curr_frame)
+            
             gaussian_tracker.update_last_status(
                 curr_frame,
                 gaussian_map.model_map["render_depth"],
@@ -206,10 +193,7 @@ class SLAM_ROS(Node):
             #         run_pcd=False
             #     )
             #     gaussian_map.save_model(save_data=True)
-            gaussian_packet = self.get_gaussian_packet(curr_frame, gaussian_map.global_params_detach)
-            self.publish_message_to_gui(gaussian_packet)
-
-
+            self.publish_message_to_gui(curr_frame, gaussian_map.global_params_detach)
 
             gaussian_map.time += 1
             move_to_cpu(curr_frame)

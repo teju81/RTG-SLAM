@@ -16,7 +16,7 @@ from rtgslam_ros.utils.general_utils import (
     build_covariance_from_scaling_rotation,
     inverse_sigmoid
 )
-
+import cv2
 
 class Renderer:
     def setup_functions(self):
