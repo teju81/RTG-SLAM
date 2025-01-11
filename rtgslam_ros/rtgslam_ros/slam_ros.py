@@ -52,6 +52,7 @@ class SLAM_ROS(Node):
         self.queue_size = 100
         self.msg_counter = 0
         self.f2g_publisher = self.create_publisher(F2G,'/Front2GUI',self.queue_size)
+        self.test_publisher = self.create_publisher(String,'/test_topic',self.queue_size)
 
     def publish_message_to_gui(self, current_frame, last_global_params):
         gui_packet = GUIPacket(current_frame, last_global_params)
@@ -62,6 +63,12 @@ class SLAM_ROS(Node):
         self.f2g_publisher.publish(f2g_msg)
         self.msg_counter += 1
 
+    def test_publisher_fn(self, msg="test"):
+        msg = String()
+        msg.data = f"test message: {self.msg_counter}"
+        self.get_logger().info(f'Publishing to test topic: {self.msg_counter}')
+        self.test_publisher.publish(msg)
+        self.msg_counter += 1
 
     def convert_to_f2g_ros_msg(self, gui_packet):
         
@@ -138,22 +145,24 @@ class SLAM_ROS(Node):
 
         # start SLAM
         for frame_id, frame_info in enumerate(dataset.scene_info.train_cameras):
+            start_time = time.time()
             curr_frame = loadCam(
                 dataset_params, frame_id, frame_info, dataset_params.resolution_scales[0]
             )
 
             print("\n========== curr frame is: %d ==========\n" % frame_id)
             move_to_gpu(curr_frame)
-            start_time = time.time()
+            t1 = time.time()
+
             # tracker process
             frame_map = gaussian_tracker.map_preprocess(curr_frame, frame_id)
             gaussian_tracker.tracking(curr_frame, frame_map)
             tracker_time = time.time()
-            tracker_consume_time = tracker_time - start_time
+            tracker_consume_time = tracker_time - t1
             time_recorder.update_mean("tracking", tracker_consume_time, 1)
 
             tracker_time_sum += tracker_consume_time
-            print(f"[LOG] tracker cost time: {tracker_time - start_time}")
+            print(f"[LOG] tracker cost time: {tracker_consume_time}")
 
             mapper_start_time = time.time()
 
@@ -176,7 +185,7 @@ class SLAM_ROS(Node):
             time_recorder.update_mean("mapping", mapper_consume_time, 1)
 
             mapper_time_sum += mapper_consume_time
-            print(f"[LOG] mapper cost time: {mapper_time - tracker_time}")
+            print(f"[LOG] mapper cost time: {mapper_consume_time}")
             if record_mem:
                 time_recorder.watch_gpu()
             # # report eval loss
@@ -193,11 +202,22 @@ class SLAM_ROS(Node):
             #         run_pcd=False
             #     )
             #     gaussian_map.save_model(save_data=True)
-            self.publish_message_to_gui(curr_frame, gaussian_map.global_params_detach)
+            
+
+            if frame_id % 10 == 0:
+                ros_time1 = time.time()
+                self.publish_message_to_gui(curr_frame, gaussian_map.global_params_detach)
+                #self.test_publisher_fn()
+                ros_time2 = time.time()
+                print(f"[LOG] ROS cost time: {ros_time2-ros_time1}")
+
 
             gaussian_map.time += 1
             move_to_cpu(curr_frame)
             torch.cuda.empty_cache()
+            end_time = time.time()
+            ietr_time = end_time - start_time
+            print(f"Time {ietr_time} seconds to process frame id #{frame_id}")
         print("\n========== main loop finish ==========\n")
         print(
             "[LOG] stable num: {:d}, unstable num: {:d}".format(
@@ -212,6 +232,8 @@ class SLAM_ROS(Node):
         new_poses = gaussian_tracker.get_new_poses()
         gaussian_map.update_poses(new_poses)
         gaussian_map.global_optimization(optimization_params, is_end=True)
+        # self.publish_message_to_gui(curr_frame, gaussian_map.global_params_detach)
+
         # eval_frame(
         #     gaussian_map,
         #     gaussian_map.keyframe_list[-1],

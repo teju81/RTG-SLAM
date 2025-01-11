@@ -88,11 +88,6 @@ class SLAM_GUI(Node):
         self.gaussian_cur = None
         self.gui_packet = None
         self.renderer = Renderer(self.args)
-
-        self.position = np.array([0.0, 0.0, 0.5]).astype(np.float32)
-        self.target = np.array([0.0, -1.0, 0.0]).astype(np.float32)
-        self.up = np.array([0.0, -1.0, 0.0]).astype(np.float32)
-
         self.pipe = None
         self.background = None
 
@@ -156,7 +151,6 @@ class SLAM_GUI(Node):
         self.window.set_on_close(self._on_close) # Set a callable function that gets called when window is closed
         self.widget3d = gui.SceneWidget() # Displays 3D content
         self.widget3d.scene = rendering.Open3DScene(self.window.renderer) # Open3D scene that is to be rendered on the window
-        self.widget3d.scene.camera.look_at(self.position, self.target, self.up)
 
         cg_settings = rendering.ColorGrading(
             rendering.ColorGrading.Quality.ULTRA,
