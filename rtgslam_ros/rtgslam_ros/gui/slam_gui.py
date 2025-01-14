@@ -539,10 +539,10 @@ class SLAM_GUI(Node):
         # T = torch.from_numpy(w2c)
 
         frame_info = self.dataset_cameras[0]
-        orig_w, orig_h = frame_info.image.size
+        #orig_w, orig_h = frame_info.image.size
         #resolution_scale = image_gui.shape[1] / orig_h
-        resolution_scale = 1
-        current_cam = loadCam(self.args, 0, frame_info, resolution_scale)
+        #resolution_scale = 1
+        current_cam = loadCam(self.args, 0, frame_info, 1)
 
         current_cam.update(w2c[0:3, 0:3], w2c[0:3, 3])
         return current_cam

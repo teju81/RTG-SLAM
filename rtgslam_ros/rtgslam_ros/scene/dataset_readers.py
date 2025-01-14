@@ -52,25 +52,70 @@ def get_split_list(a, num):
         return a[0 : a_num : a_num // num][:num]
 
 
-class CameraInfo(NamedTuple):
-    uid: int
-    R: np.array
-    T: np.array
-    FovY: np.array
-    FovX: np.array
-    image: np.array
-    image_path: str
-    image_name: str
-    width: int
-    height: int
-    depth: np.array
-    depth_path: str
-    pose_gt: np.array = np.eye(4)
-    cx: float = -1
-    cy: float = -1
-    depth_scale: float = 1
-    timestamp: float = -1
+# class CameraInfo(NamedTuple):
+#     uid: int
+#     R: np.array
+#     T: np.array
+#     FovY: np.array
+#     FovX: np.array
+#     image: np.array
+#     image_path: str
+#     image_name: str
+#     width: int
+#     height: int
+#     depth: np.array
+#     depth_path: str
+#     pose_gt: np.array = np.eye(4)
+#     cx: float = -1
+#     cy: float = -1
+#     depth_scale: float = 1
+#     timestamp: float = -1
 
+
+class CameraInfo:
+    def __init__(
+        self,
+        uid: int,
+        R: np.array,
+        T: np.array,
+        FovY: np.array,
+        FovX: np.array,
+        image: np.array = None,
+        image_path: str = "",
+        image_name: str = "",
+        width: int = 0,
+        height: int = 0,
+        depth: np.array = None,
+        depth_path: str = "",
+        pose_gt: np.array = None,
+        fx: float = -1,
+        fy: float = -1,
+        cx: float = -1,
+        cy: float = -1,
+        depth_scale: float = 1,
+        crop_edge: float = 0,
+        timestamp: float = -1,
+    ):
+        self.uid = uid
+        self.R = R
+        self.T = T
+        self.FovY = FovY
+        self.FovX = FovX
+        self.image = image
+        self.image_path = image_path
+        self.image_name = image_name
+        self.width = width
+        self.height = height
+        self.depth = depth
+        self.depth_path = depth_path
+        self.pose_gt = pose_gt if pose_gt is not None else np.eye(4)
+        self.fx = fx
+        self.fy = fy
+        self.cx = cx
+        self.cy = cy
+        self.depth_scale = depth_scale
+        self.crop_edge = crop_edge
+        self.timestamp = timestamp
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud  # position, color, normal pcd
@@ -881,30 +926,12 @@ def readCameras(
         )  # R is stored transposed due to 'glm' in CUDA code
         T = w2c[:3, 3]
 
-        image_color = Image.open(color_paths[idx])
-        image_depth = (
-            np.asarray(Image.open(depth_paths[idx]), dtype=np.float32) / depth_scale
-        )
-        image_color = np.asarray(
-            image_color.resize((image_depth.shape[1], image_depth.shape[0]))
-        )
+
         fx, fy = intrinsic[0, 0], intrinsic[1, 1]
         cx, cy = intrinsic[0, 2], intrinsic[1, 2]
-        if crop_edge > 0:
-            image_color = image_color[
-                crop_edge:-crop_edge,
-                crop_edge:-crop_edge,
-                :,
-            ]
-            image_depth = image_depth[
-                crop_edge:-crop_edge,
-                crop_edge:-crop_edge,
-            ]
-            cx -= crop_edge
-            cy -= crop_edge
+        height = 480
+        width = 640
 
-        height, width = image_color.shape[:2]
-        # print("image size:", height, width)
         FovX = focal2fov(fx, width)
         FovY = focal2fov(fy, height)
         image_name = os.path.basename(color_paths[idx]).split(".")[0]
@@ -915,16 +942,19 @@ def readCameras(
             T=T,
             FovY=FovY,
             FovX=FovX,
-            image=Image.fromarray(image_color),
+            image=None,
             image_path=color_paths[idx],
             image_name=image_name,
             width=width,
             height=height,
-            depth=Image.fromarray(image_depth),
+            depth=None,
             depth_path=depth_paths[idx],
+            fx=fx,
+            fy=fy,
             cx=cx,
             cy=cy,
             depth_scale=depth_scale,
+            crop_edge = crop_edge,
             timestamp=timestamps[idx],
         )
         cam_infos.append(cam_info)

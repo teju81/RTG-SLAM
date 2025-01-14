@@ -14,12 +14,59 @@ from PIL import Image
 
 from rtgslam_ros.scene.cameras import Camera
 from rtgslam_ros.utils.general_utils import PILtoTorch
-from rtgslam_ros.utils.graphics_utils import fov2focal
+from rtgslam_ros.utils.graphics_utils import fov2focal, focal2fov
 
 WARNED = False
 
 
+def read_image_and_update_cam_info(cam_info):
+
+    fx = cam_info.fx
+    fy = cam_info.fy
+    cx = cam_info.cx
+    cy = cam_info.cy
+    crop_edge = cam_info.crop_edge
+    depth_scale = cam_info.depth_scale
+
+
+    image_color = Image.open(cam_info.image_path)
+    image_depth = (
+        np.asarray(Image.open(cam_info.depth_path), dtype=np.float32) / depth_scale
+    )
+    image_color = np.asarray(
+        image_color.resize((image_depth.shape[1], image_depth.shape[0]))
+    )
+    if crop_edge > 0:
+        image_color = image_color[
+            crop_edge:-crop_edge,
+            crop_edge:-crop_edge,
+            :,
+        ]
+        image_depth = image_depth[
+            crop_edge:-crop_edge,
+            crop_edge:-crop_edge,
+        ]
+        cx -= crop_edge
+        cy -= crop_edge
+
+    height, width = image_color.shape[:2]
+    # print("image size:", height, width)
+
+
+    FovX = focal2fov(fx, width)
+    FovY = focal2fov(fy, height)
+
+    cam_info.image=Image.fromarray(image_color)
+    cam_info.depth=Image.fromarray(image_depth)
+    cam_info.FovX = FovX
+    cam_info.FovY = FovY
+
+    return
+
 def loadCam(args, id, cam_info, resolution_scale):
+
+    read_image_and_update_cam_info(cam_info)
+
     orig_w, orig_h = cam_info.image.size
     preload = args.preload
     if args.resolution in [1, 2, 4, 8]:
