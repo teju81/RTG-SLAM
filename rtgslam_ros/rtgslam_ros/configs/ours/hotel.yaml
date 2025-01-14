@@ -1,4 +1,4 @@
-parent: "/root/code/rtgslam_ros_ws/src/configs/ours_base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/ours_base.yaml"
 save_step: 400
 
 frame_start: 0

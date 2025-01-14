@@ -1,4 +1,4 @@
-parent: "/root/code/rtgslam_ros_ws/src/configs/base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/base.yaml"
 
 save_path: "/root/code/output/replica_test/debug"
 
@@ -33,9 +33,9 @@ rotation_lr : 0.001
 KNN_threshold: -1
 
 # track params
-use_orb_backend: True
+use_orb_backend: False
 tracker_max_fps: 15
-orb_settings_path: "/root/code/rtgslam_ros_ws/src/configs/orb_config/ours.yaml"
+orb_settings_path: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/orb_config/ours.yaml"
 
 use_gt_pose: False
 icp_use_model_depth: True # if False, use dataset depth frame to frame
