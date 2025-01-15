@@ -5,12 +5,13 @@ import os
 from SLAM.multiprocess.mapper import MappingProcess
 from SLAM.multiprocess.tracker import TrackingProcess
 from SLAM.utils import merge_ply
+from SLAM.multiprocess.visualizer import SLAM_GUI
 
 sleep_time = 0.01
 
 
 class SLAM(object):
-    def __init__(self, map_params, optimization_params, dataset, args) -> None:
+    def __init__(self, map_params, optimization_params, dataset, params_gui, args) -> None:
         
         self.verbose = True
         self._end = torch.zeros((2)).int().share_memory_()
@@ -22,6 +23,10 @@ class SLAM(object):
         # free: there is no sync
         self.sync_tracker2mapper_method = map_params.sync_tracker2mapper_method
         self.sync_tracker2mapper_frames = map_params.sync_tracker2mapper_frames
+
+        # tracker 2 GUI
+        self._tracker2gui_call = mp.Condition()
+        self._tracker2gui_frame_queue = mp.Queue()
 
         # tracker 2 mapper
         self._tracker2mapper_call = mp.Condition()
@@ -37,21 +42,24 @@ class SLAM(object):
         self._mapper2system_map_queue = mp.Queue()
         self._mapper2system_tb_queue = mp.Queue()
         
-        self.map_process = MappingProcess(args, optimization_params, 
-                                          self)
+        self.map_process = MappingProcess(args, optimization_params, self)
         self.track_process = TrackingProcess(self, args)
+        self.gui_process = SLAM_GUI(self, args, params_gui, dataset)
         self.save_path = self.map_process.save_path
         
     
     def run(self):
         processes = []
-        for rank in range(2):
+        for rank in range(3):
             if rank == 0:
                 print("start mapping process")
                 p = mp.Process(target=self.mapping, args=(rank, ))
             elif rank == 1:
                 print("start tracking process")
                 p = mp.Process(target=self.tracking, args=(rank,))
+            elif rank == 2:
+                print("start GUI process")
+                p = mp.Process(target=self.visualizer, args=(rank,))
             p.start()
             processes.append(p)
         while self._end.sum() != 2:
@@ -82,6 +90,7 @@ class SLAM(object):
         self.release()
         self.track_process.stop()
         self.map_process.stop()
+        self.gui_process.stop()
         print("main finish")
         for p in processes:
             p.join()
@@ -94,12 +103,17 @@ class SLAM(object):
         print("start mapping")
         self.map_process.run()
 
+    def visualizer(self, rank):
+        print("start GUI")
+        self.gui_process.run()
+
     def release_mp_queue(self, mp_queue):
         while not mp_queue.empty():
             x = mp_queue.get()
             del x
 
     def release(self):
+        self.release_mp_queue(self._tracker2gui_frame_queue)
         self.release_mp_queue(self._tracker2mapper_frame_queue)
         self.release_mp_queue(self._mapper2system_map_queue)
         self.release_mp_queue(self._mapper2system_tb_queue)

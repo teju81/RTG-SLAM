@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation as R
 from SLAM.icp import IcpTracker
 from threading import Thread
 from utils.camera_utils import loadCam
-
+from gui.gui_utils import GUIPacket
 
 def convert_poses(trajs):
     poses = []
@@ -393,6 +393,10 @@ class TrackingProcess(Tracker):
         self.sync_tracker2mapper_frames = slam.sync_tracker2mapper_frames
 
         # tracker2mapper
+        self._tracker2gui_call = slam._tracker2gui_call
+        self._tracker2gui_frame_queue = slam._tracker2gui_frame_queue
+
+        # tracker2mapper
         self._tracker2mapper_call = slam._tracker2mapper_call
         self._tracker2mapper_frame_queue = slam._tracker2mapper_frame_queue
 
@@ -489,7 +493,7 @@ class TrackingProcess(Tracker):
 
             self.unpack_map_to_tracker()
             self.update_last_mapper_render(frame)
-            #self.update_viewer(frame)
+            self.update_viewer(frame)
 
             move_to_cpu(frame)
 
@@ -503,6 +507,15 @@ class TrackingProcess(Tracker):
             print("tracker wating finish")
             self.finish.wait()
         print("track finish")
+
+    def update_viewer(self, current_frame):
+        if self.last_frame is not None:
+            gui_packet = GUIPacket(current_frame, self.last_global_params)
+            print("tracker send frame {} and updated map to visualizer".format(self.map_input["time"]))
+            #self._tracker2gui_call.acquire()
+            self._tracker2gui_frame_queue.put(gui_packet)
+            # self._tracker2gui_call.notify()
+            # self._tracker2gui_call.release()
 
     def stop(self):
         with self.finish:

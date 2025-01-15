@@ -84,6 +84,46 @@ def create_frustum(pose, frusutum_color=[0, 1, 0], size=0.02):
     frustum.update_pose(pose)
     return frustum
 
+class GUIPacket:
+    def __init__(
+        self,
+        frame=None,
+        global_params=None,
+        ):
+        self.has_gaussians = False
+        self.finish = False
+
+        if frame is not None:
+            self.has_gaussians = True
+            self.xyz = global_params["xyz"].clone().detach()
+            self.opacity = global_params["opacity"].clone().detach()
+            self.scaling = global_params["scales"].clone().detach()
+            self.rotation = global_params["rotations"].clone().detach()
+            self.shs = global_params["shs"].clone().detach()
+            self.radius = global_params["shs"].clone().detach()
+            self.normal = global_params["normal"].clone().detach()
+            self.confidence = global_params["confidence"].clone().detach()
+
+            self.gtcolor = self.resize_img(frame.original_image.clone().detach(), 320)
+            self.gtdepth = self.resize_img(frame.original_depth.clone().detach(), 320).squeeze().cpu().numpy()
+            self.rot = copy.deepcopy(frame.R)
+            self.trans = copy.deepcopy(frame.T)
+
+
+    def resize_img(self, img, width):
+        if img is None:
+            return None
+
+        # check if img is numpy
+        if isinstance(img, np.ndarray):
+            height = int(width * img.shape[0] / img.shape[1])
+            return cv2.resize(img, (width, height))
+        height = int(width * img.shape[1] / img.shape[2])
+        # img is 3xHxW
+        img = torch.nn.functional.interpolate(
+            img.unsqueeze(0), size=(height, width), mode="bilinear", align_corners=False
+        )
+        return img.squeeze(0)
 
 class GaussianPacket:
     def __init__(

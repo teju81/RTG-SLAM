@@ -2,6 +2,7 @@ import os
 from argparse import ArgumentParser
 
 from utils.config_utils import read_config
+from munch import munchify
 
 parser = ArgumentParser(description="Training script parameters")
 parser.add_argument("--config", type=str)
@@ -21,6 +22,7 @@ from SLAM.multiprocess.system import *
 from SLAM.multiprocess.mapper import *
 from SLAM.utils import *
 from utils.general_utils import safe_state
+from gui.gui_utils import ParamsGUI
 
 torch.set_printoptions(4, sci_mode=False)
 np.set_printoptions(4)
@@ -37,6 +39,16 @@ def main():
     dataset_params = dataset_params.extract(args)
     map_params = map_params.extract(args)
 
+    pipeline_params = munchify(args.pipeline_params)
+    model_params = munchify(args.model_params)
+    bg_color = [0, 0, 0]
+    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    params_gui = ParamsGUI(
+                    pipe=pipeline_params,
+                    background=background
+                )
+
     # Initialize dataset
     dataset = Dataset(
         dataset_params,
@@ -50,7 +62,7 @@ def main():
     except RuntimeError:
         pass
 
-    slam = SLAM(map_params, optimization_params, dataset, args)
+    slam = SLAM(map_params, optimization_params, dataset, params_gui, args)
     slam.run()
 
 

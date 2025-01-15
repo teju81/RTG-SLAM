@@ -121,3 +121,17 @@ tracker_max_fps: 30
 # evaluate
 renderer_opaque_threshold_eval: 0.5
 pcd_densify: False
+
+# model params
+model_params:
+  sh_degree: 0
+  source_path: ""
+  model_path: ""
+  resolution: -1
+  white_background: False
+  data_device: "cuda"
+
+# pipeline Params
+pipeline_params:
+  convert_SHs_python: False
+  compute_cov3D_python: False
