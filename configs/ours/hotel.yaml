@@ -1,4 +1,4 @@
-parent: "configs/ours_base.yaml"
+parent: "/root/code/rtgslam_ros_ws/src/configs/ours_base.yaml"
 save_step: 400
 
 frame_start: 0
@@ -6,7 +6,7 @@ frame_step: 0
 frame_num: -1
 
 # dataset params:
-source_path: "./data/Ours/hotel"
-save_path: "output/dataset/Ours/hotel"
+source_path: "/root/code/datasets/hotel"
+save_path: "/root/code/output/dataset/ours/hotel"
 
 use_gt_pose: False

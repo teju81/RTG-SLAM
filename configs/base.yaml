@@ -1,7 +1,7 @@
 parent: None
 quiet: False
 device_list: [0]
-save_path: "/root/code/output/tum/debug"
+save_path: "/root/code/output/ours/debug"
 use_tensorboard: True
 record_mem: False
 verbose: False
@@ -12,7 +12,7 @@ sync_tracker2mapper_method: "strict"
 sync_tracker2mapper_frames: 5
 
 # dataset params:
-type: "TUM"
+type: "Ours" # Scannetpp, TUM, Replica, Ours
 source_path: ""
 frame_start: 0
 frame_step: 0
@@ -104,7 +104,7 @@ icp_fail_threshold: 0.02
 # orb backend
 use_orb_backend: False
 use_orb_viewer: False
-orb_vocab_path: "thirdParty/ORB-SLAM2-PYBIND/Vocabulary/ORBvoc.txt"
+orb_vocab_path: "/root/code/thirdParty/RTG-SLAM-PYBIND/Vocabulary/ORBvoc.txt"
 orb_settings_path: ""
 tracker_max_fps: 15
 orb_useicp: True
