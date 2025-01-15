@@ -14,7 +14,7 @@ import torch
 import torch.nn.functional as F
 from OpenGL import GL as gl
 
-from utils.graphics_utils import fov2focal, getWorld2View2
+from utils.graphics_utils import fov2focal, getWorld2View3
 from gui.gl_render import util, util_gau
 from gui.gl_render.render_ogl import OpenGLRenderer
 from gui.gui_utils import (
@@ -67,6 +67,7 @@ class SLAM_GUI(object):
 
         self.q_main2vis = None
         self.gaussian_cur = None
+        self.keyframes = []
         self.pipe = None
         self.background = None
 
@@ -284,7 +285,7 @@ class SLAM_GUI(object):
         self.g_renderer.set_render_reso(self.g_camera.w, self.g_camera.h)
 
     def add_camera(self, R, T, name, color=[0, 1, 0], gt=False, size=0.01):
-        W2C = getWorld2View2(R, T)
+        W2C = getWorld2View3(R, T)
         # W2C = (
         #     getWorld2View2(camera.R_gt, camera.T_gt)
         #     if gt
@@ -439,14 +440,27 @@ class SLAM_GUI(object):
         if self.gui_packet is None:
             return
 
-        # if gaussian_packet.has_gaussians:
-        #     self.gaussian_cur = gaussian_packet
-        #     self.output_info.text = "Number of Gaussians: {}".format(
-        #         self.gaussian_cur.get_xyz.shape[0]
+        if self.gui_packet.has_gaussians:
+            #self.gaussian_cur = gaussian_packet
+            self.output_info.text = "Number of Gaussians: {}".format(
+                self.gui_packet.xyz.shape[0]
+            )
+            self.init = True
+
+        # if self.keyframes is not None:
+        #     name = "keyframe_{}".format(gaussian_packet.keyframe.uid)
+        #     frustum = self.add_camera(
+        #         gaussian_packet.keyframe, name=name, color=[0, 0, 1]
         #     )
-        #     self.init = True
+
+        if self.keyframes is not None:
+            for uid, keyframe in enumerate(self.keyframes):
+                R, T = keyframe
+                name = "keyframe_{}".format(uid)
+                frustum = self.add_camera(R, T, name=name, color=[0, 0, 1])
 
         if self.gui_packet.has_gaussians:
+            self.keyframes.append((self.gui_packet.rot, self.gui_packet.trans))
             frustum = self.add_camera(
                 self.gui_packet.rot, self.gui_packet.trans, name="current", color=[0, 1, 0]
             )
@@ -457,17 +471,6 @@ class SLAM_GUI(object):
                     else frustum.view_dir
                 )
                 self.widget3d.look_at(viewpoint[0], viewpoint[1], viewpoint[2])
-
-        # if gaussian_packet.keyframe is not None:
-        #     name = "keyframe_{}".format(gaussian_packet.keyframe.uid)
-        #     frustum = self.add_camera(
-        #         gaussian_packet.keyframe, name=name, color=[0, 0, 1]
-        #     )
-
-        # if gaussian_packet.keyframes is not None:
-        #     for keyframe in gaussian_packet.keyframes:
-        #         name = "keyframe_{}".format(keyframe.uid)
-        #         frustum = self.add_camera(keyframe, name=name, color=[0, 0, 1])
 
         # if gaussian_packet.kf_window is not None:
         #     self.kf_window = gaussian_packet.kf_window
