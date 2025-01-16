@@ -5,7 +5,7 @@ import numpy as np
 import open3d as o3d
 import torch
 
-from rtgslam_ros.utils.general_utils import (
+from utils.general_utils import (
     build_scaling_rotation,
     strip_symmetric,
 )
