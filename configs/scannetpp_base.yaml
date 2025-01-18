@@ -9,7 +9,7 @@ max_depth: 10.0
 
 # dataset params:
 type: "Scannetpp"
-source_path: "/root/code/datasets/scannetpp/parsed/0a5c013435"
+source_path: "/root/code/datasets/scannetpp/parsed/08bbbdcc3d"
 
 # state manage
 stable_confidence_thres: 400
