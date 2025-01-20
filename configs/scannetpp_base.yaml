@@ -1,6 +1,6 @@
 parent: "configs/base.yaml"
 
-save_path: "output/scannetpp/debug"
+save_path: "/root/code/output/scannetpp/debug"
 
 # map params
 uniform_sample_num: 68620
@@ -9,7 +9,7 @@ max_depth: 10.0
 
 # dataset params:
 type: "Scannetpp"
-source_path: "/root/code/datasets/scannetpp/parsed/08bbbdcc3d"
+source_path: "/root/code/datasets/scannetpp/parsed/39f36da05b"
 
 # state manage
 stable_confidence_thres: 400

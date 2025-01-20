@@ -12,7 +12,7 @@ sync_tracker2mapper_method: "strict"
 sync_tracker2mapper_frames: 5
 
 # dataset params:
-type: "Scannetpp" # Scannetpp, TUM, Replica, Ours
+type: "Ours" # Scannetpp, TUM, Replica, Ours
 source_path: ""
 frame_start: 0
 frame_step: 0

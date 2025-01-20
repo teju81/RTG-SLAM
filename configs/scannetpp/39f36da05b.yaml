@@ -6,5 +6,5 @@ frame_step: 0
 frame_num: -1
 
 # dataset params:
-source_path: "data/ScanNetpp/39f36da05b"
-save_path: "output/dataset/ScanNetpp/39f36da05b"
+source_path: "/root/code/datasets/scannetpp/39f36da05b"
+save_path: "/root/code/output/dataset/scannetpp/39f36da05b"
