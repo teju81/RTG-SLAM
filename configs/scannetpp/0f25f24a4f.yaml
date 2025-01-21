@@ -1,0 +1,9 @@
+parent: "configs/scannetpp_base.yaml"
+
+frame_start: 0
+frame_step: 0
+frame_num: -1
+
+# dataset params:
+source_path: "/root/code/datasets/scannetpp/parsed/0f25f24a4f"
+save_path: "/root/code/output/dataset/scannetpp/0f25f24a4f"

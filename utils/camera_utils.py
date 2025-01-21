@@ -20,6 +20,8 @@ WARNED = False
 
 def read_image_and_update_cam_info(cam_info):
 
+    # Camera intrinsics fx, fy, cx, and cy need to be scaled if original image is rescaled (intrinsics are recorded for original image size)
+    # Distortion coefficients do not change
     fx = cam_info.fx
     fy = cam_info.fy
     cx = cam_info.cx
@@ -48,6 +50,7 @@ def read_image_and_update_cam_info(cam_info):
         cx -= crop_edge
         cy -= crop_edge
 
+    # Image height and width is set based on image - overrides the random intialization in the data_reader.py file
     height, width = image_color.shape[:2]
     # print("image size:", height, width)
 

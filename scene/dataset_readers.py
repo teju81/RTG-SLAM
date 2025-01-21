@@ -928,6 +928,8 @@ def readCameras(
 
         fx, fy = intrinsic[0, 0], intrinsic[1, 1]
         cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+
+        # Set the height and width to some random value - will be adjusted to the actual value when images are loaded
         height = 480
         width = 640
 
