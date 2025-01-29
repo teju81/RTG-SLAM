@@ -102,9 +102,9 @@ icp_warmup_frames: 0
 icp_fail_threshold: 0.02
 
 # orb backend
-use_orb_backend: False
-use_orb_viewer: False
-orb_vocab_path: "/root/code/thirdParty/RTG-SLAM-PYBIND/Vocabulary/ORBvoc.txt"
+use_orb_backend: True
+use_orb_viewer: True
+orb_vocab_path: "/root/code/ORB_SLAM2/Vocabulary/ORBvoc.txt"
 orb_settings_path: ""
 tracker_max_fps: 15
 orb_useicp: True
@@ -115,7 +115,7 @@ sync_tracker2mapper_method : "strict"
 #                                     mapper_frame_id + sync_tracker2mapper_frames]
 # free: there is no sync
 sync_tracker2mapper_frames : 5
-system_verbose: False
+system_verbose: True
 tracker_max_fps: 30
 
 # evaluate

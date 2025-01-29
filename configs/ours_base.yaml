@@ -34,7 +34,7 @@ rotation_lr : 0.001
 KNN_threshold: -1
 
 # track params
-use_orb_backend: False
+use_orb_backend: True
 tracker_max_fps: 15
 orb_settings_path: "configs/orb_config/ours.yaml"
 
