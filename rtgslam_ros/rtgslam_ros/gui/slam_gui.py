@@ -116,6 +116,7 @@ class SLAM_GUI(Node):
         self.g_renderer = OpenGLRenderer(self.g_camera.w, self.g_camera.h)
         self.color_jet = plt.cm.jet(np.linspace(0, 1, 50))
         self.num_keyframes = 0
+        self.keyframe_poses = []
 
 
         gl.glEnable(gl.GL_TEXTURE_2D)
@@ -898,20 +899,19 @@ class SLAM_GUI(Node):
                 )
                 self.widget3d.look_at(viewpoint[0], viewpoint[1], viewpoint[2])
 
-        # if gaussian_packet.keyframe is not None:
-        #     self.num_keyframes += 1
-        #     name = "keyframe_{}".format(gaussian_packet.keyframe.uid)
-        #     frustum = self.add_camera(
-        #         gaussian_packet.keyframe, name=name, color=[0, 0, 1]
-        #     )
+            if self.num_keyframes > 0:
+                for idx, pose in enumerate(self.keyframe_poses):
+                    rot, trans = pose
+                    name = "keyframe_{}".format(idx)
+                    print(name)
+                    idx = idx % 50
+                    color = self.color_jet[idx][:-1] # select only RGB and ignore last term which is A
+                    color = [1, 0, 0]
+                    frustum = self.add_camera(
+                    rot, trans, name="current", color=color)
 
-        # if gaussian_packet.keyframes is not None:
-        #     for idx,keyframe in enumerate(gaussian_packet.keyframes):
-        #         name = "keyframe_{}".format(keyframe.uid)
-        #         idx = idx % 50
-        #         color = self.color_jet[idx][:-1] # select only RGB and ignore last term which is A
-        #         #color = [1, 0, 0]
-        #         frustum = self.add_camera(keyframe, name=name, color=color)
+            self.keyframe_poses.append((self.gui_packet.rot, self.gui_packet.trans))
+            self.num_keyframes += 1
 
         # if gaussian_packet.kf_window is not None:
         #     self.kf_window = gaussian_packet.kf_window

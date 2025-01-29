@@ -4,7 +4,7 @@ import cv2
 from rtgslam_ros.utils.config_utils import read_config
 
 parser = ArgumentParser(description="Training script parameters")
-parser.add_argument("--config", type=str, default="/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml")
+parser.add_argument("--config", type=str, default="/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/ours/hotel.yaml")
 args = parser.parse_args()
 config_path = args.config
 args = read_config(config_path)

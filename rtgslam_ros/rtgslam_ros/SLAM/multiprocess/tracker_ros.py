@@ -800,7 +800,7 @@ def spin_thread(node):
 def main():
     parser = ArgumentParser(description="Training script parameters")
     args = parser.parse_args()
-    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/tum/fr1_desk.yaml"
+    config_path = "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/ours/hotel.yaml"
     args = read_config(config_path)
     # set visible devices
     device_list = args.device_list
