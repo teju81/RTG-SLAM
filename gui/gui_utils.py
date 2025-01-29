@@ -95,6 +95,7 @@ class GUIPacket:
 
         if frame is not None:
             self.has_gaussians = True
+            self.uid = frame.uid
             self.xyz = global_params["xyz"].clone().detach()
             self.opacity = global_params["opacity"].clone().detach()
             self.scaling = global_params["scales"].clone().detach()
