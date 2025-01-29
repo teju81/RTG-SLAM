@@ -887,10 +887,23 @@ class SLAM_GUI(Node):
         #     )
         #     self.init = True
 
+        if self.num_keyframes > 0:
+            for idx, pose in enumerate(self.keyframe_poses):
+                rot, trans = pose
+                name = "keyframe_{}".format(idx)
+                idx = idx % 50
+                color = self.color_jet[idx][:-1] # select only RGB and ignore last term which is A
+                #color = [1, 0, 0]
+                frustum = self.add_camera(
+                rot, trans, name=name, color=color)
+
         if self.gui_packet.has_gaussians:
             frustum = self.add_camera(
                 self.gui_packet.rot, self.gui_packet.trans, name="current", color=[0, 1, 0]
             )
+            print(f"frame num {self.num_keyframes +1}")
+            #print(self.gui_packet.rot)
+            print(f"X: {self.gui_packet.trans[0]}, Y: {self.gui_packet.trans[1]}, Z: {self.gui_packet.trans[2]}")
             if self.followcam_chbox.checked:
                 viewpoint = (
                     frustum.view_dir_behind
@@ -899,16 +912,6 @@ class SLAM_GUI(Node):
                 )
                 self.widget3d.look_at(viewpoint[0], viewpoint[1], viewpoint[2])
 
-            if self.num_keyframes > 0:
-                for idx, pose in enumerate(self.keyframe_poses):
-                    rot, trans = pose
-                    name = "keyframe_{}".format(idx)
-                    print(name)
-                    idx = idx % 50
-                    color = self.color_jet[idx][:-1] # select only RGB and ignore last term which is A
-                    color = [1, 0, 0]
-                    frustum = self.add_camera(
-                    rot, trans, name="current", color=color)
 
             self.keyframe_poses.append((self.gui_packet.rot, self.gui_packet.trans))
             self.num_keyframes += 1
