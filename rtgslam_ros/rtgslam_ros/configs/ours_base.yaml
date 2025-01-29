@@ -1,6 +1,6 @@
 parent: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/base.yaml"
 
-save_path: "/root/code/output/replica_test/debug"
+save_path: "/root/code/output/ours/debug"
 
 # map params
 uniform_sample_num: 46080
@@ -18,6 +18,7 @@ invalid_confidence_thresh: 0.1
 type: "Ours"
 source_path: "/root/code/datasets/hotel"
 
+
 # state manage
 stable_confidence_thres: 250
 unstable_time_window: 400
@@ -33,7 +34,7 @@ rotation_lr : 0.001
 KNN_threshold: -1
 
 # track params
-use_orb_backend: False
+use_orb_backend: True
 tracker_max_fps: 15
 orb_settings_path: "/root/code/rtgslam_ros_ws/src/rtgslam_ros/rtgslam_ros/configs/orb_config/ours.yaml"
 

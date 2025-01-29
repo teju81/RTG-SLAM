@@ -7,6 +7,6 @@ frame_num: -1
 
 # dataset params:
 source_path: "/root/code/datasets/hotel"
-save_path: "/root/code/output/dataset/Ours/hotel"
+save_path: "/root/code/output/dataset/ours/hotel"
 
 use_gt_pose: False
