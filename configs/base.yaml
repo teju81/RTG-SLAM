@@ -102,8 +102,8 @@ icp_warmup_frames: 0
 icp_fail_threshold: 0.02
 
 # orb backend
-use_orb_backend: True
-use_orb_viewer: True
+use_orb_backend: False
+use_orb_viewer: False
 orb_vocab_path: "/root/code/ORB_SLAM2/Vocabulary/ORBvoc.txt"
 orb_settings_path: ""
 tracker_max_fps: 15

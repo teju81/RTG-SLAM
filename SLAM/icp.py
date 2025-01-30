@@ -427,9 +427,9 @@ class IcpTracker:
                 
             pose_t1_t0 = devF(torch.from_numpy(np.eye(4)))
             levels = len(self.icp_downscales)
-            print(f"Running ICP on {levels} levels...")
+            #print(f"Running ICP on {levels} levels...")
             for level in range(levels):
-                print(f"Running ICP on level {level}...")
+                #print(f"Running ICP on level {level}...")
                 downscale = self.icp_downscales[level]
                 K_downscale = K * downscale
                 K_downscale[2,2] = 1.0
@@ -447,7 +447,7 @@ class IcpTracker:
                                    self.vertex_pyramid_t1[-1] @ pose_t1_t0_pytorch[:3,:3].T + pose_t1_t0_pytorch[:3, 3], 
                                    self.normal_pyramid_t0[-1], 
                                    )
-        print(p2ploss, valid_ratio)
+        #print(p2ploss, valid_ratio)
         tracking_success = True
         if p2ploss > self.icp_fail_threshold:
             tracking_success = False

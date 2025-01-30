@@ -591,7 +591,7 @@ class SLAM_GUI(object):
         return current_cam
 
     def rasterise(self, current_cam):
-        Log("Rasterize....")
+        #Log("Rasterize....")
         # if (
         #     self.time_shader_chbox.checked
         #     and self.gaussian_cur is not None

@@ -900,6 +900,26 @@ def readCameras(
     crop_edge=0,
     eval_=False,
 ):
+    # Coordinate frame needs to be transformed
+    # Code written for display uses TUM dataset convention
+    # TUM Coordinate System
+    # X-axis: Points to the right (camera's right)
+    # Y-axis: Points downward (camera's down)
+    # Z-axis: Points forward (camera's viewing direction)
+
+    # Scannet++ Coordinate System
+    # X-axis: Points to the right (camera's right)
+    # Y-axis: Points forward (camera's viewing direction)
+    # Z-axis: Points Upward (camera's up)
+
+    # Transform Scannet++ to TUM convention
+    R_correction = np.array([
+        [ 1,  0,  0,  0], # Preserve or flip X
+        [ 0, 0,  -1,  0], # permute Y and Z and flip
+        [ 0,  1,  0,  0], # permute Y and Z
+        [ 0,  0,  0,  1]
+    ])
+
     cam_infos = []
     pose_w_t0 = np.eye(4)
     for idx_ in range(len(indices)):
@@ -909,7 +929,7 @@ def readCameras(
         sys.stdout.write("Reading camera {}/{}".format(idx_ + 1, len(indices)))
         sys.stdout.flush()
 
-        c2w = poses[idx]
+        c2w = R_correction @ poses[idx]
         if idx_ == 0:
             pose_w_t0 = np.linalg.inv(c2w)
         # pass invalid pose
@@ -950,6 +970,7 @@ def readCameras(
             height=height,
             depth=None,
             depth_path=depth_paths[idx],
+            pose_gt=w2c,
             fx=fx,
             fy=fy,
             cx=cx,

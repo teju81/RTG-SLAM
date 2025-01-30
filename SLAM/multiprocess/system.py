@@ -12,6 +12,8 @@ sleep_time = 0.01
 
 class SLAM(object):
     def __init__(self, map_params, optimization_params, dataset, params_gui, args) -> None:
+
+        self.args = args
         
         self.verbose = True
         self._end = torch.zeros((2)).int().share_memory_()
@@ -43,21 +45,21 @@ class SLAM(object):
         self._mapper2system_tb_queue = mp.Queue()
         
         self.map_process = MappingProcess(args, optimization_params, self)
-        self.track_process = TrackingProcess(self, args)
         self.gui_process = SLAM_GUI(self, args, params_gui, dataset)
         self.save_path = self.map_process.save_path
         
     
     def run(self):
+        track_process = TrackingProcess(self, self.args)
         processes = []
         for rank in range(3):
             if rank == 0:
                 print("start mapping process")
                 p = mp.Process(target=self.mapping, args=(rank, ))
-            elif rank == 1:
-                print("start tracking process")
-                p = mp.Process(target=self.tracking, args=(rank,))
             elif rank == 2:
+                print("start tracking process")
+                p = mp.Process(target=track_process.run())
+            elif rank == 1:
                 print("start GUI process")
                 p = mp.Process(target=self.visualizer, args=(rank,))
             p.start()
@@ -95,9 +97,9 @@ class SLAM(object):
         for p in processes:
             p.join()
     
-    def tracking(self, rank):
-        print("start traking")
-        self.track_process.run()
+    # def tracking(self, rank):
+    #     print("start traking")
+    #     self.track_process.run()
 
     def mapping(self, rank):
         print("start mapping")
