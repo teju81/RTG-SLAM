@@ -12,6 +12,7 @@ from SLAM.icp import IcpTracker
 from threading import Thread
 from utils.camera_utils import loadCam
 from gui.gui_utils import GUIPacket
+import pynvml
 
 def convert_poses(trajs):
     poses = []
@@ -494,6 +495,7 @@ class TrackingProcess(Tracker):
             self.unpack_map_to_tracker()
             self.update_last_mapper_render(frame)
             self.update_viewer(frame)
+            #self.print_detailed_gpu_info()
 
             move_to_cpu(frame)
 
@@ -507,6 +509,39 @@ class TrackingProcess(Tracker):
             print("tracker wating finish")
             self.finish.wait()
         print("track finish")
+
+
+    def print_detailed_gpu_info(self):
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            name = pynvml.nvmlDeviceGetName(handle)
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            fan_speed = pynvml.nvmlDeviceGetFanSpeed(handle)
+            power_usage = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000  # mW to W
+            power_limit = pynvml.nvmlDeviceGetEnforcedPowerLimit(handle) / 1000  # mW to W
+            graphics_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
+            sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+            mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+            video_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_VIDEO)
+
+            print(f"GPU {i}: {name}")
+            print(f"  Memory Usage: {memory_info.used / 1024**2:.2f} MB / {memory_info.total / 1024**2:.2f} MB")
+            print(f"  GPU Utilization: {utilization.gpu}%")
+            print(f"  Memory Utilization: {utilization.memory}%")
+            print(f"  Temperature: {temperature} °C")
+            print(f"  Fan Speed: {fan_speed}%")
+            print(f"  Power Usage: {power_usage:.2f} W / {power_limit:.2f} W")
+            print(f"  Graphics Clock: {graphics_clock} MHz")
+            print(f"  SM Clock: {sm_clock} MHz")
+            print(f"  Memory Clock: {mem_clock} MHz")
+            print(f"  Video Clock: {video_clock} MHz")
+            print("")
+
+        pynvml.nvmlShutdown()
 
     def update_viewer(self, current_frame):
         if self.last_frame is not None:
