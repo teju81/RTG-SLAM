@@ -749,6 +749,12 @@ class SLAM_GUI(object):
 
             gui.Application.instance.post_to_main_thread(self.window, update)
 
+    def stop(self):
+        # Signal the update thread to finish its process
+        self.process_finished = True
+        # Quit the Open3D application
+        o3d.visualization.gui.Application.instance.quit()
+        Log("GUI has been stopped.", tag="GUI")
 
     def run(self):
         Log("Bringing up GUI....", tag="GUI")

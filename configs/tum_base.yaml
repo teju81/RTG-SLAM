@@ -21,8 +21,8 @@ scaling_lr : 0.02
 rotation_lr : 0.001
 
 use_gt_pose: False
-use_orb_backend: False
-orb_useicp: False
+use_orb_backend: True
+orb_useicp: True
 icp_use_model_depth: True
 
 # track params

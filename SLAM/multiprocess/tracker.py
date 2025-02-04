@@ -1,4 +1,6 @@
 import copy
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from SLAM.gaussian_pointcloud import *
 
@@ -436,7 +438,8 @@ class TrackingProcess(Tracker):
         if self.use_online_scanner:
             return self.scanner_finish
         else:
-            return self.frame_id >= len(self.dataset_cameras)
+            # return self.frame_id >= len(self.dataset_cameras)
+            return self.frame_id >= 2000 #len(self.dataset_cameras)
 
     def getNextFrame(self):
         frame_info = self.dataset_cameras[self.frame_id]
@@ -509,7 +512,6 @@ class TrackingProcess(Tracker):
             print("tracker wating finish")
             self.finish.wait()
         print("track finish")
-
 
     def print_detailed_gpu_info(self):
         pynvml.nvmlInit()

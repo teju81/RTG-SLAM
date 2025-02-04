@@ -18,7 +18,6 @@ invalid_confidence_thresh: 0.1
 type: "Ours"
 source_path: "/root/code/datasets/hotel"
 
-
 # state manage
 stable_confidence_thres: 250
 unstable_time_window: 400
